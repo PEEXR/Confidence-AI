@@ -30,6 +30,8 @@
 # CELL 1 — bootstrap: dependencies, imports, platform + device detection
 # ============================================================================
 import importlib
+import importlib.metadata
+import importlib.util
 import subprocess
 import sys
 
@@ -68,11 +70,10 @@ import gc
 import hashlib
 import json
 import os
-import platform as _platform
+import platform as py_platform
 import random
 import re
 import shutil
-import subprocess as _sp
 import threading
 import time
 import warnings
@@ -125,7 +126,7 @@ def detect_devices() -> dict:
         "max_vram_gb": 0.0,
         "bf16": False,
         "torch": torch.__version__,
-        "python": _platform.python_version(),
+        "python": py_platform.python_version(),
     }
     for i in range(info["n_gpu"]):
         p = torch.cuda.get_device_properties(i)
@@ -428,16 +429,31 @@ class Config:
         return hashlib.sha256(payload.encode()).hexdigest()[:12]
 
 
-CFG = Config()
+_BASE_CFG = Config()
 
 # --------------------------------------------------------------------------
-# Quick-start overrides — uncomment a block instead of editing the dataclass.
-# --------------------------------------------------------------------------
-# Smoke test (~2 minutes, no gates meaningful):
-# CFG = replace(CFG, RUN_NAME="smoke", N_PILOT=8, N_PER_CELL=16, N_SAMPLES=3,
-#               N_BOOTSTRAP=200, ONLY_MODELS=("qwen2.5-0.5b-instruct",),
-#               ONLY_TIERS=("R1", "C1"))
+# SMOKE — set False for the real run.
 #
+# Exercises every stage end-to-end on a handful of questions. At this size the
+# 60/20/20 split is degenerate (3/1/1 per cell), so the probe and calibration
+# stages will legitimately skip: they need >=20 train and >=10 calibration
+# rows. That is the expected smoke outcome, not a failure. The band gate is
+# also bypassed, because a 5-question pilot cannot meaningfully land in the
+# 25-80% accuracy band.
+# --------------------------------------------------------------------------
+SMOKE = True
+
+CFG = replace(
+    _BASE_CFG,
+    RUN_NAME="smoke", N_PILOT=5, N_PER_CELL=5, N_AGREEMENT=5, N_MANUAL_CHECK=5,
+    N_SAMPLES=3, N_BOOTSTRAP=200,
+    ONLY_MODELS=("qwen2.5-0.5b-instruct", "qwen2.5-1.5b-instruct"),
+    COMMIT_CELLS_OUTSIDE_BAND=True,
+) if SMOKE else _BASE_CFG
+
+# --------------------------------------------------------------------------
+# Other quick-start overrides — uncomment instead of editing the dataclass.
+# --------------------------------------------------------------------------
 # H0-only abort branch (PLAN §13 — publishable alone, no probe, no sampling):
 # CFG = replace(CFG, RUN_NAME="h0_only",
 #               STAGES=("data", "verbal", "grade", "stats", "figures", "tables", "report"))
@@ -461,7 +477,7 @@ print(f"stages        : {CFG.STAGES}")
 # CELL 4 — paths, provenance (X1), checkpointed JSONL io
 # ============================================================================
 
-_PLATFORM_PATHS = {
+PLATFORM_PATHS = {
     "kaggle": dict(out="/kaggle/working/confidence", cache="/kaggle/temp/hf"),
     "molab":  dict(out="./confidence_out",          cache="./hf_cache"),
     "colab":  dict(out="/content/confidence",       cache="/content/hf_cache"),
@@ -470,7 +486,7 @@ _PLATFORM_PATHS = {
 
 
 def _resolve_paths(cfg: Config) -> dict:
-    d = _PLATFORM_PATHS.get(cfg.resolved_platform(), _PLATFORM_PATHS["local"])
+    d = PLATFORM_PATHS.get(cfg.resolved_platform(), PLATFORM_PATHS["local"])
     out = Path(cfg.OUTPUT_ROOT or d["out"]) / cfg.RUN_NAME
     cache = cfg.HF_CACHE or d["cache"]
     tree = {
@@ -504,9 +520,9 @@ if CFG.HF_OFFLINE:
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
-def _code_sha() -> str:
+def code_sha() -> str:
     try:
-        r = _sp.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5)
+        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5)
         if r.returncode == 0:
             return r.stdout.strip()
     except Exception:
@@ -520,7 +536,7 @@ def build_provenance(cfg: Config) -> dict:
         "run_name": cfg.RUN_NAME,
         "config_hash": cfg.hash(),
         "seed": cfg.SEED,
-        "code_sha": _code_sha(),
+        "code_sha": code_sha(),
         "platform": cfg.resolved_platform(),
         "devices": DEVICES,
         "dtype": str(cfg.resolved_dtype()),
@@ -690,19 +706,19 @@ def vram_report() -> dict:
 from datasets import load_dataset  # noqa: E402
 
 
-def _hf_load(hf_id: str, hf_config: str | None, split: str):
+def hf_load(hf_id: str, hf_config: str | None, split: str):
     kwargs = {"split": split}
     if hf_config:
         return load_dataset(hf_id, hf_config, **kwargs)
     return load_dataset(hf_id, **kwargs)
 
 
-def _load_with_fallbacks(tier: str, spec: dict):
+def load_with_fallbacks(tier: str, spec: dict):
     attempts = [(spec["hf_id"], spec.get("hf_config"), spec["hf_split"])] + TIER_FALLBACKS.get(tier, [])
     errors = []
     for hf_id, cfgname, split in attempts:
         try:
-            ds = _hf_load(hf_id, cfgname, split)
+            ds = hf_load(hf_id, cfgname, split)
             if hf_id != spec["hf_id"]:
                 LOG.log("dataset_fallback", tier=tier, used=hf_id, primary=spec["hf_id"])
             return ds, hf_id
@@ -711,7 +727,7 @@ def _load_with_fallbacks(tier: str, spec: dict):
     raise RuntimeError(f"tier {tier}: all dataset sources failed:\n  " + "\n  ".join(errors))
 
 
-def _parse_popqa_answers(row: dict) -> list[str]:
+def parse_popqa_answers(row: dict) -> list[str]:
     """PopQA ships `possible_answers` as a JSON-encoded list — the alias list is
     what makes this tier gradeable with zero fuzzy matching."""
     out: list[str] = []
@@ -738,12 +754,12 @@ def _parse_popqa_answers(row: dict) -> list[str]:
     return uniq
 
 
-def _gsm8k_answer(raw: str) -> str:
+def gsm8k_answer(raw: str) -> str:
     m = re.search(r"####\s*(.+)$", raw.strip())
     return (m.group(1) if m else raw).strip().replace(",", "")
 
 
-def _math_answer(solution: str) -> str | None:
+def math_answer(solution: str) -> str | None:
     """Extract the content of the last \\boxed{...}, brace-balanced."""
     idx = solution.rfind("\\boxed")
     if idx < 0:
@@ -766,18 +782,18 @@ def _math_answer(solution: str) -> str | None:
     return None
 
 
-def _math_level(row: dict) -> int | None:
+def math_level(row: dict) -> int | None:
     lvl = str(row.get("level", ""))
     m = re.search(r"(\d)", lvl)
     return int(m.group(1)) if m else None
 
 
-def _build_tier_rows(tier: str, spec: dict, rng: np.random.Generator) -> list[dict]:
+def build_tier_rows(tier: str, spec: dict, rng: np.random.Generator) -> list[dict]:
     """Return normalised question records for one tier, randomly sampled.
 
     Every record: {qid, tier, question, answers[list of acceptable], meta}
     """
-    ds, source = _load_with_fallbacks(tier, spec)
+    ds, source = load_with_fallbacks(tier, spec)
     rows: list[dict] = []
 
     if tier in ("R1", "R2"):
@@ -788,7 +804,7 @@ def _build_tier_rows(tier: str, spec: dict, rng: np.random.Generator) -> list[di
             p = float(row.get("s_pop") or 0.0)
             if (keep_hi and p < hi) or ((not keep_hi) and p > lo):
                 continue
-            answers = _parse_popqa_answers(row)
+            answers = parse_popqa_answers(row)
             if not answers or not row.get("question"):
                 continue
             rows.append(dict(
@@ -811,7 +827,7 @@ def _build_tier_rows(tier: str, spec: dict, rng: np.random.Generator) -> list[di
 
     elif tier == "C1":
         for i, row in enumerate(ds):
-            ans = _gsm8k_answer(row["answer"])
+            ans = gsm8k_answer(row["answer"])
             rows.append(dict(
                 qid=f"{tier}-{i}", tier=tier, question=row["question"].strip(), answers=[ans],
                 meta=dict(source=source),
@@ -820,10 +836,10 @@ def _build_tier_rows(tier: str, spec: dict, rng: np.random.Generator) -> list[di
     elif tier in ("C2", "C3"):
         want = {1, 2} if tier == "C2" else {4, 5}
         for i, row in enumerate(ds):
-            lvl = _math_level(row)
+            lvl = math_level(row)
             if lvl not in want:
                 continue
-            ans = _math_answer(row.get("solution", "") or "")
+            ans = math_answer(row.get("solution", "") or "")
             if not ans:
                 continue
             rows.append(dict(
@@ -839,7 +855,7 @@ def _build_tier_rows(tier: str, spec: dict, rng: np.random.Generator) -> list[di
     return [rows[i] for i in order]
 
 
-def _assign_splits(rows: list[dict], fracs: tuple[float, float, float], rng: np.random.Generator) -> None:
+def assign_splits(rows: list[dict], fracs: tuple[float, float, float], rng: np.random.Generator) -> None:
     n = len(rows)
     idx = rng.permutation(n)
     n_tr = int(round(fracs[0] * n))
@@ -869,12 +885,12 @@ def build_question_bank(cfg: Config) -> dict[str, list[dict]]:
     bank: dict[str, list[dict]] = {}
     for tier in cfg.active_tiers():
         spec = TIER_SPECS[tier]
-        pool = _build_tier_rows(tier, spec, rng)
+        pool = build_tier_rows(tier, spec, rng)
         n_take = min(cfg.N_PER_CELL, len(pool))
         if n_take < cfg.N_PER_CELL:
             LOG.log("tier_short", tier=tier, available=len(pool), requested=cfg.N_PER_CELL)
         sel = pool[:n_take]
-        _assign_splits(sel, cfg.SPLIT_FRACTIONS, rng)
+        assign_splits(sel, cfg.SPLIT_FRACTIONS, rng)
         # The pilot subset is drawn from the *train* split so the band gate
         # never touches calibration or test (PLAN §14.2).
         train_ids = [r["qid"] for r in sel if r["split"] == "train"]
@@ -919,14 +935,14 @@ BUCKET_ORDINAL = {b: i for i, b in enumerate(reversed(BUCKETS))}
 BET_GAIN, BET_LOSS = 1, -2
 
 
-def _reasoning_block(cot: bool) -> str:
+def reasoning_block(cot: bool) -> str:
     return "REASONING: <at most 3 short sentences of working>\n" if cot else ""
 
 
-def _instruction(variant: str, tier_spec: dict) -> str:
+def instruction(variant: str, tier_spec: dict) -> str:
     style = ANSWER_STYLE[tier_spec["answer_form"]]
     cot = tier_spec["cot"]
-    lines = _reasoning_block(cot)
+    lines = reasoning_block(cot)
     if variant == "A":
         body = (
             "Answer the question, then state how confident you are that your answer is correct.\n\n"
@@ -971,7 +987,7 @@ def _instruction(variant: str, tier_spec: dict) -> str:
 
 # Few-shot exemplars for the base model, which has no chat template and needs
 # the format demonstrated rather than instructed (PLAN §9 flag / E5).
-_FEWSHOT_POOL = {
+FEWSHOT_POOL = {
     "A": [
         ("What is the capital of France?", "ANSWER: Paris\nCONFIDENCE: 99"),
         ("Who wrote the novel Beloved?", "ANSWER: Toni Morrison\nCONFIDENCE: 92"),
@@ -997,13 +1013,13 @@ _FEWSHOT_POOL = {
         ("What is the surname of the mayor of Lisbon in 1954?", "ANSWER: Frade"),
     ],
 }
-_FEWSHOT_POOL["SAMPLE"] = _FEWSHOT_POOL["FORCED"]
+FEWSHOT_POOL["SAMPLE"] = FEWSHOT_POOL["FORCED"]
 
 
 def build_prompt(variant: str, question: str, tier_spec: dict, model_spec: dict,
                  tokenizer, cfg: Config) -> str:
     """Return the fully-rendered prompt string for one (variant, question)."""
-    instr = _instruction(variant, tier_spec)
+    instr = instruction(variant, tier_spec)
     if model_spec["chat"]:
         msgs = [
             {"role": "system", "content": "You are a precise assistant. You always reply in the exact requested format."},
@@ -1012,7 +1028,7 @@ def build_prompt(variant: str, question: str, tier_spec: dict, model_spec: dict,
         return tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
 
     # Base model: instruction + few-shot completion, no chat template.
-    shots = _FEWSHOT_POOL[variant][: cfg.N_FEWSHOT_BASE]
+    shots = FEWSHOT_POOL[variant][: cfg.N_FEWSHOT_BASE]
     parts = [instr.rstrip(), ""]
     for q, a in shots:
         parts += [f"Question: {q}", a, ""]
@@ -1026,25 +1042,25 @@ def build_prompt(variant: str, question: str, tier_spec: dict, model_spec: dict,
 # Parse failure is a measured quantity, not an exception (PLAN §17.3).
 # ============================================================================
 
-_KEY_RE_CACHE: dict[str, re.Pattern] = {}
+KEY_RE_CACHE: dict[str, re.Pattern] = {}
 
 
-def _key_regex(key: str) -> re.Pattern:
-    if key not in _KEY_RE_CACHE:
-        _KEY_RE_CACHE[key] = re.compile(rf"^[\s\*\-#>]*{key}\s*[:：]\s*(.*?)\s*$", re.IGNORECASE | re.MULTILINE)
-    return _KEY_RE_CACHE[key]
+def key_regex(key: str) -> re.Pattern:
+    if key not in KEY_RE_CACHE:
+        KEY_RE_CACHE[key] = re.compile(rf"^[\s\*\-#>]*{key}\s*[:：]\s*(.*?)\s*$", re.IGNORECASE | re.MULTILINE)
+    return KEY_RE_CACHE[key]
 
 
-def _grab(text: str, key: str) -> str | None:
+def grab(text: str, key: str) -> str | None:
     """Last match wins — CoT models often restate the key after working."""
-    ms = _key_regex(key).findall(text or "")
+    ms = key_regex(key).findall(text or "")
     for v in reversed(ms):
         if v.strip():
             return v.strip()
     return None
 
 
-def _clean_answer(raw: str | None) -> str | None:
+def clean_answer(raw: str | None) -> str | None:
     if raw is None:
         return None
     a = raw.strip().strip("`").strip()
@@ -1087,17 +1103,17 @@ def parse_confidence_bucket(raw: str | None) -> str | None:
 def parse_response(variant: str, text: str) -> dict:
     """Never raises. `parse_ok` is False when the required fields are absent."""
     out: dict[str, Any] = {"raw_len": len(text or ""), "parse_ok": False}
-    ans = _clean_answer(_grab(text, "ANSWER"))
-    out["reasoning"] = _grab(text, "REASONING")
+    ans = clean_answer(grab(text, "ANSWER"))
+    out["reasoning"] = grab(text, "REASONING")
 
     if variant == "A":
-        conf = parse_confidence_numeric(_grab(text, "CONFIDENCE"))
+        conf = parse_confidence_numeric(grab(text, "CONFIDENCE"))
         out.update(answer=ans, confidence=conf, parse_ok=ans is not None and conf is not None)
     elif variant == "B":
-        bucket = parse_confidence_bucket(_grab(text, "CONFIDENCE"))
+        bucket = parse_confidence_bucket(grab(text, "CONFIDENCE"))
         out.update(answer=ans, bucket=bucket, parse_ok=ans is not None and bucket is not None)
     elif variant == "C":
-        dec_raw = (_grab(text, "DECISION") or "").upper()
+        dec_raw = (grab(text, "DECISION") or "").upper()
         decision = "PASS" if "PASS" in dec_raw else ("ANSWER" if "ANSWER" in dec_raw else None)
         if decision is None and ans:                    # no DECISION line but an answer given
             decision = "PASS" if (ans or "").upper() in {"NONE", "PASS", "N/A"} else "ANSWER"
@@ -1117,19 +1133,19 @@ def parse_response(variant: str, text: str) -> dict:
 # agreement is computable per grader family (PLAN §7, §16).
 # ============================================================================
 
-_ARTICLES = {"a", "an", "the"}
-_PUNCT_RE = re.compile(r"[^\w\s\.\-/]", re.UNICODE)
+ARTICLES = {"a", "an", "the"}
+PUNCT_RE = re.compile(r"[^\w\s\.\-/]", re.UNICODE)
 
 
 def normalize_text(s: str, strip_articles: bool = True) -> str:
     s = (s or "").lower().strip()
     s = s.replace("\u2013", "-").replace("\u2014", "-").replace("\u2019", "'")
-    s = _PUNCT_RE.sub(" ", s)
-    toks = [t for t in s.split() if not (strip_articles and t in _ARTICLES)]
+    s = PUNCT_RE.sub(" ", s)
+    toks = [t for t in s.split() if not (strip_articles and t in ARTICLES)]
     return " ".join(toks).strip()
 
 
-def _extract_number(s: str) -> float | None:
+def extract_number(s: str) -> float | None:
     if s is None:
         return None
     t = s.replace(",", "").replace("$", "").replace("%", "").strip()
@@ -1143,11 +1159,11 @@ def _extract_number(s: str) -> float | None:
 
 
 def grade_numeric(pred: str, golds: Sequence[str], tol: float) -> bool | None:
-    p = _extract_number(pred)
+    p = extract_number(pred)
     if p is None:
         return None
     for g in golds:
-        gv = _extract_number(g)
+        gv = extract_number(g)
         if gv is None:
             continue
         if abs(p - gv) <= max(tol, tol * abs(gv)):
@@ -1155,7 +1171,7 @@ def grade_numeric(pred: str, golds: Sequence[str], tol: float) -> bool | None:
     return False
 
 
-_MATH_SUBS = [
+MATH_SUBS = [
     (r"\\left", ""), (r"\\right", ""), (r"\\!", ""), (r"\\,", ""), (r"\\;", ""), (r"\\ ", " "),
     (r"\\dfrac", r"\\frac"), (r"\\tfrac", r"\\frac"), (r"\\cdot", "*"), (r"\\times", "*"),
     (r"\^\{\\circ\}", ""), (r"\^\\circ", ""), (r"\\%", ""), (r"\\\$", ""), (r"\\text\{([^}]*)\}", r"\1"),
@@ -1165,7 +1181,7 @@ _MATH_SUBS = [
 
 def normalize_math(s: str) -> str:
     t = (s or "").strip().strip("$").strip()
-    for pat, rep in _MATH_SUBS:
+    for pat, rep in MATH_SUBS:
         t = re.sub(pat, rep, t)
     t = t.replace("dollars", "").replace("$", "")
     if re.fullmatch(r"-?\d+\.0+", t):
@@ -1225,7 +1241,7 @@ class NLIGrader:
 
     def __init__(self, model_name: str, threshold: float, batch_size: int, dtype, device: str):
         self.model_name, self.threshold, self.batch_size = model_name, threshold, batch_size
-        self.dtype, self.device = dtype, device
+        self.dtype, self.device = torch.float32, device  # see _ensure(): fp32 only
         self._tok = None
         self._model = None
         self._entail_idx = 2
@@ -1235,8 +1251,11 @@ class NLIGrader:
             return
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
         self._tok = AutoTokenizer.from_pretrained(self.model_name)
+        # Always float32: DeBERTa's disentangled attention has fp32-only kernels
+        # and raises "expected scalar type Float but found BFloat16" under the
+        # generation dtype. The model is ~1.6 GB, so fp32 costs nothing here.
         self._model = AutoModelForSequenceClassification.from_pretrained(
-            self.model_name, torch_dtype=self.dtype if self.device != "cpu" else torch.float32
+            self.model_name, torch_dtype=torch.float32
         ).to(self.device).eval()
         labels = {v.lower(): k for k, v in self._model.config.id2label.items()}
         self._entail_idx = labels.get("entailment", 2)
@@ -1309,14 +1328,14 @@ def grade_answer(pred: str | None, golds: Sequence[str], answer_form: str, cfg: 
 
 # Aggregate decode throughput at large batch, HF transformers (not vLLM).
 # Bandwidth-bound: tok/s ~= HBM bandwidth / (2 bytes x params), derated.
-_HW_PROFILES = {
+HW_PROFILES = {
     "blackwell_96gb": dict(bandwidth_tb_s=1.79, efficiency=12.0, label="RTX Pro 6000 Blackwell (molab)"),
     "t4_single":      dict(bandwidth_tb_s=0.32, efficiency=3.0,  label="1x T4 (Kaggle)"),
     "t4_sharded":     dict(bandwidth_tb_s=0.32, efficiency=1.5,  label="2x T4 pipeline-parallel"),
 }
 
 
-def _detect_profile() -> str:
+def detect_profile() -> str:
     if not DEVICES["cuda"]:
         return "t4_single"
     if DEVICES["max_vram_gb"] > 60:
@@ -1325,7 +1344,7 @@ def _detect_profile() -> str:
 
 
 def estimate_compute(cfg: Config, profile: str | None = None) -> pd.DataFrame:
-    prof = _HW_PROFILES[profile or _detect_profile()]
+    prof = HW_PROFILES[profile or detect_profile()]
     # generations per question: 3 formats + forced pass on ~20% of C-passes + N samples + 1 greedy extraction
     gens = 3 + 0.2 + cfg.N_SAMPLES + 1
     out_tokens_per_model = sum(
@@ -1374,7 +1393,7 @@ COMPUTE_ESTIMATE = estimate_compute(CFG)
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
 
-def _auto_batch_size(model_spec: dict, tier_spec: dict, cfg: Config) -> int:
+def auto_batch_size(model_spec: dict, tier_spec: dict, cfg: Config) -> int:
     if cfg.BATCH_SIZE > 0:
         return cfg.BATCH_SIZE
     if not DEVICES["cuda"]:
@@ -1390,7 +1409,7 @@ def _auto_batch_size(model_spec: dict, tier_spec: dict, cfg: Config) -> int:
     return max(1, bs)
 
 
-def _device_map(cfg: Config) -> str | dict:
+def device_map(cfg: Config) -> str | dict:
     """One device when the model fits (molab); shard only when it must (2x T4)."""
     if not DEVICES["cuda"]:
         return "cpu"
@@ -1413,7 +1432,7 @@ def load_model(name: str, cfg: Config) -> LoadedModel:
         spec["hf_id"],
         torch_dtype=cfg.resolved_dtype(),
         attn_implementation=cfg.ATTN_IMPL,
-        device_map=_device_map(cfg),
+        device_map=device_map(cfg),
         low_cpu_mem_usage=True,
     )
     model.eval()
@@ -1592,7 +1611,7 @@ def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, 
     if not todo:
         return stats
 
-    bs = _auto_batch_size(lm.spec, tier_spec, cfg)
+    bs = auto_batch_size(lm.spec, tier_spec, cfg)
     temp = cfg.GREEDY_TEMPERATURE if temperature is None else temperature
     tap = ActivationTap(lm, cfg.PERCENTILES) if capture_activations else None
     act_store: dict[int, list[np.ndarray]] = defaultdict(list)
@@ -1659,14 +1678,14 @@ def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, 
             tap.close()
 
     if act_store and cfg.SAVE_ACTIVATIONS:
-        _save_activations(lm.name, tier, act_qids, act_store, cfg)
+        save_activations(lm.name, tier, act_qids, act_store, cfg)
 
     stats["seconds"] = round(time.time() - t0, 1)
     stats["parse_rate"] = stats["parse_ok"] / max(stats["generated"], 1)
     return stats
 
 
-def _save_activations(model: str, tier: str, qids: list[str],
+def save_activations(model: str, tier: str, qids: list[str],
                       store: dict[int, list[np.ndarray]], cfg: Config) -> None:
     """Append-safe shard per (model, tier). Stored float32 per PLAN §16."""
     path = PATHS["acts"] / f"{model}__{tier}.npz"
@@ -1696,15 +1715,15 @@ def _save_activations(model: str, tier: str, qids: list[str],
 RAW_KEYS = ("qid", "variant")
 
 
-def _raw_path(stage: str, model: str, tier: str) -> Path:
+def raw_path(stage: str, model: str, tier: str) -> Path:
     return PATHS["raw"] / stage / model / f"{tier}.jsonl"
 
 
-def _open_ckpt(stage: str, model: str, tier: str, cfg: Config) -> Checkpoint:
-    return Checkpoint(_raw_path(stage, model, tier), RAW_KEYS, cfg.CHECKPOINT_EVERY, cfg.RESUME)
+def open_ckpt(stage: str, model: str, tier: str, cfg: Config) -> Checkpoint:
+    return Checkpoint(raw_path(stage, model, tier), RAW_KEYS, cfg.CHECKPOINT_EVERY, cfg.RESUME)
 
 
-def _cell_items(bank: dict, tier: str, subset: str) -> list[dict]:
+def cell_items(bank: dict, tier: str, subset: str) -> list[dict]:
     rows = bank[tier]
     if subset == "pilot":
         return [r for r in rows if r.get("is_pilot")]
@@ -1718,8 +1737,8 @@ def stage_pilot(lm: LoadedModel, bank: dict, cfg: Config) -> dict:
     the 25–80% accuracy band before committing compute (PLAN §3)."""
     out = {}
     for tier in cfg.active_tiers():
-        with _open_ckpt("pilot", lm.name, tier, cfg) as ck:
-            out[tier] = run_generation(lm, _cell_items(bank, tier, "pilot"), "FORCED", tier, cfg, ck)
+        with open_ckpt("pilot", lm.name, tier, cfg) as ck:
+            out[tier] = run_generation(lm, cell_items(bank, tier, "pilot"), "FORCED", tier, cfg, ck)
     return out
 
 
@@ -1730,8 +1749,8 @@ def stage_verbal(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str]) 
     out = {}
     for tier in cfg.active_tiers():
         full = cell_id(lm.name, tier) in committed
-        items = _cell_items(bank, tier, "all" if full else "agreement")
-        with _open_ckpt("verbal", lm.name, tier, cfg) as ck:
+        items = cell_items(bank, tier, "all" if full else "agreement")
+        with open_ckpt("verbal", lm.name, tier, cfg) as ck:
             for variant in ("A", "B", "C"):
                 out[f"{tier}:{variant}"] = run_generation(lm, items, variant, tier, cfg, ck)
     return out
@@ -1742,7 +1761,7 @@ def stage_forced(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str]) 
     out = {}
     by_qid = {t: {r["qid"]: r for r in bank[t]} for t in cfg.active_tiers()}
     for tier in cfg.active_tiers():
-        recs = jsonl_read(_raw_path("verbal", lm.name, tier))
+        recs = jsonl_read(raw_path("verbal", lm.name, tier))
         passes = [r["qid"] for r in recs
                   if r["variant"] == "C" and isinstance(r.get("parsed"), dict)
                   and r["parsed"].get("decision") == "PASS"]
@@ -1750,7 +1769,7 @@ def stage_forced(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str]) 
         if not items:
             out[tier] = {"requested": 0, "todo": 0, "generated": 0, "note": "no Format C passes"}
             continue
-        with _open_ckpt("forced", lm.name, tier, cfg) as ck:
+        with open_ckpt("forced", lm.name, tier, cfg) as ck:
             out[tier] = run_generation(lm, items, "FORCED", tier, cfg, ck)
     return out
 
@@ -1762,8 +1781,8 @@ def stage_sample(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str]) 
     for tier in cfg.active_tiers():
         if cell_id(lm.name, tier) not in committed:
             continue
-        with _open_ckpt("sample", lm.name, tier, cfg) as ck:
-            out[tier] = run_generation(lm, _cell_items(bank, tier, "all"), "SAMPLE", tier, cfg, ck,
+        with open_ckpt("sample", lm.name, tier, cfg) as ck:
+            out[tier] = run_generation(lm, cell_items(bank, tier, "all"), "SAMPLE", tier, cfg, ck,
                                        n_return=cfg.N_SAMPLES, temperature=cfg.SAMPLE_TEMPERATURE)
     return out
 
@@ -1776,8 +1795,8 @@ def stage_extract(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str])
     for tier in cfg.active_tiers():
         if cell_id(lm.name, tier) not in committed:
             continue
-        with _open_ckpt("extract", lm.name, tier, cfg) as ck:
-            out[tier] = run_generation(lm, _cell_items(bank, tier, "all"), "SAMPLE", tier, cfg, ck,
+        with open_ckpt("extract", lm.name, tier, cfg) as ck:
+            out[tier] = run_generation(lm, cell_items(bank, tier, "all"), "SAMPLE", tier, cfg, ck,
                                        temperature=0.0, capture_activations=True)
     return out
 
@@ -1788,7 +1807,7 @@ def evaluate_band_gate(bank: dict, cfg: Config, nli: "NLIGrader | None") -> dict
     verdicts = {}
     for model in cfg.active_models():
         for tier in cfg.active_tiers():
-            recs = jsonl_read(_raw_path("pilot", model, tier))
+            recs = jsonl_read(raw_path("pilot", model, tier))
             if not recs:
                 continue
             gold = {r["qid"]: r for r in bank[tier]}
@@ -1831,7 +1850,7 @@ def stage_grade(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFram
     for stage in ("pilot", "verbal", "forced", "sample", "extract"):
         for model in cfg.active_models():
             for tier in cfg.active_tiers():
-                recs = jsonl_read(_raw_path(stage, model, tier))
+                recs = jsonl_read(raw_path(stage, model, tier))
                 if not recs:
                     continue
                 gold = {r["qid"]: r for r in bank[tier]}
@@ -1863,7 +1882,7 @@ def stage_grade(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFram
     return df
 
 
-def _cluster_answers(answers: list[str], answer_form: str, cfg: Config,
+def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
                      nli: "NLIGrader | None") -> list[int]:
     """Fast path: normalised string identity. Robust path: bidirectional NLI
     entailment + agglomerative merge (PLAN §5·2)."""
@@ -1922,7 +1941,7 @@ def stage_entropy(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFr
     rows = []
     for model in cfg.active_models():
         for tier in cfg.active_tiers():
-            recs = jsonl_read(_raw_path("sample", model, tier))
+            recs = jsonl_read(raw_path("sample", model, tier))
             if not recs:
                 continue
             gold = {r["qid"]: r for r in bank[tier]}
@@ -1937,7 +1956,7 @@ def stage_entropy(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFr
                                      n_valid=0, n_clusters=0, entropy=np.nan,
                                      confidence_behavioral=np.nan, modal_share=np.nan))
                     continue
-                labels = _cluster_answers(answers, q["answer_form"], cfg, nli)
+                labels = cluster_answers(answers, q["answer_form"], cfg, nli)
                 sizes = np.array(list(Counter(labels).values()), dtype=float)
                 p = sizes / sizes.sum()
                 H = float(sps.entropy(p))
@@ -1983,7 +2002,7 @@ from sklearn.pipeline import make_pipeline                       # noqa: E402
 from sklearn.preprocessing import StandardScaler                 # noqa: E402
 
 
-def _load_activations(model: str, tier: str) -> tuple[list[str], dict[int, np.ndarray]] | None:
+def load_activations(model: str, tier: str) -> tuple[list[str], dict[int, np.ndarray]] | None:
     path = PATHS["acts"] / f"{model}__{tier}.npz"
     if not path.exists():
         return None
@@ -1993,7 +2012,7 @@ def _load_activations(model: str, tier: str) -> tuple[list[str], dict[int, np.nd
     return qids, mats
 
 
-def _probe_labels(model: str, tier: str, qids: list[str], graded: pd.DataFrame,
+def probe_labels(model: str, tier: str, qids: list[str], graded: pd.DataFrame,
                   entropy: pd.DataFrame, cfg: Config) -> tuple[np.ndarray, np.ndarray]:
     """Returns (y, mask). Binary correctness or thresholded semantic entropy."""
     if cfg.PROBE_LABEL == "entropy" and len(entropy):
@@ -2011,14 +2030,14 @@ def _probe_labels(model: str, tier: str, qids: list[str], graded: pd.DataFrame,
     return np.clip(vals, 0, 1), vals >= 0
 
 
-def _fit_probe(X: np.ndarray, y: np.ndarray, cfg: Config, seed: int) -> Any:
+def fit_probe(X: np.ndarray, y: np.ndarray, cfg: Config, seed: int) -> Any:
     return make_pipeline(
         StandardScaler(),
         LogisticRegression(max_iter=cfg.PROBE_MAX_ITER, C=1.0, random_state=seed, n_jobs=None),
     ).fit(X, y)
 
 
-def _safe_auroc(y: np.ndarray, s: np.ndarray) -> float:
+def safe_auroc(y: np.ndarray, s: np.ndarray) -> float:
     if len(np.unique(y)) < 2:
         return float("nan")
     return float(roc_auc_score(y, s))
@@ -2036,11 +2055,11 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
         if not v["committed"]:
             continue
         model, tier = v["model"], v["tier"]
-        loaded = _load_activations(model, tier)
+        loaded = load_activations(model, tier)
         if loaded is None:
             continue
         qids, mats = loaded
-        y, mask = _probe_labels(model, tier, qids, graded, entropy, cfg)
+        y, mask = probe_labels(model, tier, qids, graded, entropy, cfg)
         splits = np.array([split_of[tier].get(q, "train") for q in qids])
         fin = json_read(PATHS["acts"] / f"{model}__{tier}.finiteness.json", {})
 
@@ -2060,7 +2079,7 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
             if tr_p.sum() < 20 or ca_p.sum() < 10 or len(np.unique(y[tr_p])) < 2:
                 continue
 
-            clf = _fit_probe(X[tr_p], y[tr_p], cfg, cfg.SEED)
+            clf = fit_probe(X[tr_p], y[tr_p], cfg, cfg.SEED)
             s_tr = clf.predict_proba(X[tr_p])[:, 1]
             s_ca = clf.predict_proba(X[ca_p])[:, 1]
             s_te = clf.predict_proba(X[te_p])[:, 1] if te_p.sum() else np.array([])
@@ -2072,7 +2091,7 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
                 yp = rng.permutation(y[tr_p])
                 if len(np.unique(yp)) < 2:
                     continue
-                null.append(_safe_auroc(y[ca_p], _fit_probe(X[tr_p], yp, cfg, cfg.SEED).predict_proba(X[ca_p])[:, 1]))
+                null.append(safe_auroc(y[ca_p], fit_probe(X[tr_p], yp, cfg, cfg.SEED).predict_proba(X[ca_p])[:, 1]))
             null = np.array([x for x in null if np.isfinite(x)])
 
             # Surface / prompt-only baseline (PLAN §14.1, §17.3)
@@ -2084,19 +2103,19 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
                     Xs = vec.fit_transform([texts[i] for i in np.where(tr_p)[0]])
                     sclf = LogisticRegression(max_iter=1000, random_state=cfg.SEED).fit(Xs, y[tr_p])
                     Xc = vec.transform([texts[i] for i in np.where(ca_p)[0]])
-                    auroc_surface = _safe_auroc(y[ca_p], sclf.predict_proba(Xc)[:, 1])
+                    auroc_surface = safe_auroc(y[ca_p], sclf.predict_proba(Xc)[:, 1])
                 except Exception:                          # noqa: BLE001
                     pass
 
-            auroc_cal = _safe_auroc(y[ca_p], s_ca)
+            auroc_cal = safe_auroc(y[ca_p], s_ca)
             rows.append(dict(
                 cell=cid, model=model, tier=tier, family=TIER_SPECS[tier]["family"],
                 params_b=MODEL_SPECS[model]["params_b"], layer_pct=pct,
                 layer_index=percentile_layers(MODEL_SPECS[model]["layers"], [pct])[pct],
                 n_train=int(tr_p.sum()), n_cal=int(ca_p.sum()), n_test=int(te_p.sum()),
                 base_rate=float(y[tr_p].mean()),
-                auroc_train=_safe_auroc(y[tr_p], s_tr), auroc_cal=auroc_cal,
-                auroc_test=_safe_auroc(y[te_p], s_te) if te_p.sum() else float("nan"),
+                auroc_train=safe_auroc(y[tr_p], s_tr), auroc_cal=auroc_cal,
+                auroc_test=safe_auroc(y[te_p], s_te) if te_p.sum() else float("nan"),
                 auroc_null_mean=float(null.mean()) if null.size else float("nan"),
                 auroc_null_p95=float(np.percentile(null, 95)) if null.size else float("nan"),
                 beats_null=bool(null.size and auroc_cal > np.percentile(null, 95)),
@@ -2282,7 +2301,7 @@ def empirical_bucket_map(graded: pd.DataFrame, cfg: Config) -> dict:
     return out
 
 
-def _verbal_scores(graded: pd.DataFrame, bmap: dict, cfg: Config) -> pd.DataFrame:
+def verbal_scores(graded: pd.DataFrame, bmap: dict, cfg: Config) -> pd.DataFrame:
     """Convert each format to a common 0–1 scale (PLAN §4 agreement check §2)."""
     rows = []
     g = graded[graded.variant.isin(["A", "B", "C"]) & (graded.sample_idx == 0)]
@@ -2309,7 +2328,7 @@ def _verbal_scores(graded: pd.DataFrame, bmap: dict, cfg: Config) -> pd.DataFram
     return pd.DataFrame(rows)
 
 
-def _internal_scores(sweep: pd.DataFrame, bank: dict, graded: pd.DataFrame,
+def internal_scores(sweep: pd.DataFrame, bank: dict, graded: pd.DataFrame,
                      entropy: pd.DataFrame, committed: dict, cfg: Config) -> pd.DataFrame:
     """Refit the winning-percentile probe and emit per-question test scores.
     Winner selected on CALIBRATION only (PLAN §6·6)."""
@@ -2323,20 +2342,20 @@ def _internal_scores(sweep: pd.DataFrame, bank: dict, graded: pd.DataFrame,
             continue
         best = g.loc[g["auroc_cal"].idxmax()]
         model, tier, pct = best["model"], best["tier"], int(best["layer_pct"])
-        loaded = _load_activations(model, tier)
+        loaded = load_activations(model, tier)
         if loaded is None:
             continue
         qids, mats = loaded
         X = mats.get(pct)
         if X is None:
             continue
-        y, mask = _probe_labels(model, tier, qids, graded, entropy, cfg)
+        y, mask = probe_labels(model, tier, qids, graded, entropy, cfg)
         splits = np.array([split_of[tier].get(q, "train") for q in qids])
         fin = np.isfinite(X).all(axis=1)
         tr = mask & fin & (splits == "train")
         if tr.sum() < 20 or len(np.unique(y[tr])) < 2:
             continue
-        clf = _fit_probe(X[tr], y[tr], cfg, cfg.SEED)
+        clf = fit_probe(X[tr], y[tr], cfg, cfg.SEED)
         s_all = clf.predict_proba(X)[:, 1]
         for i, q in enumerate(qids):
             if not fin[i]:
@@ -2352,8 +2371,8 @@ def assemble_signals(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
     values for all three signals, plus ground truth. Calibrators fit on the
     calibration split, applied to test (PLAN §8·1–2)."""
     bmap = empirical_bucket_map(graded, cfg)
-    verbal = _verbal_scores(graded, bmap, cfg)
-    internal = _internal_scores(sweep, bank, graded, entropy, committed, cfg)
+    verbal = verbal_scores(graded, bmap, cfg)
+    internal = internal_scores(sweep, bank, graded, entropy, committed, cfg)
 
     # Canonical verbal format: best ECE on the calibration split (PLAN §4·4).
     fmt_ece = {}
@@ -2499,7 +2518,7 @@ def test_h1_signal_calibration(signals: pd.DataFrame, cfg: Config) -> dict:
     return out
 
 
-def _question_features(bank: dict) -> pd.DataFrame:
+def question_features(bank: dict) -> pd.DataFrame:
     """Cheap, pre-registered question-level features for the H2 contingency
     test (PLAN §13 H2): length, digits/dates, entity-ish capitalisation."""
     rows = []
@@ -2535,7 +2554,7 @@ def test_h2_quadrants(signals: pd.DataFrame, bank: dict, cfg: Config) -> dict:
             return "suppressed"
         return "agree_high" if v >= thr else "agree_low"
     test["quadrant"] = test.apply(quad, axis=1)
-    feats = _question_features(bank)
+    feats = question_features(bank)
     merged = test.merge(feats, on=["tier", "qid"], how="left", suffixes=("", "_f"))
     merged = merged[merged.quadrant.notna()]
 
@@ -2783,8 +2802,13 @@ def correlation_table(signals: pd.DataFrame, cfg: Config) -> pd.DataFrame:
 @dataclass
 class JudgeConfig:
     ENABLED: bool = False                     # flip on for the audit pass
-    MODEL: str = "Qwen/Qwen2.5-72B-Instruct-AWQ"
-    FALLBACKS: tuple[str, ...] = ("Qwen/Qwen2.5-32B-Instruct-AWQ", "Qwen/Qwen2.5-14B-Instruct")
+    # Default ladder is chosen to load NATIVELY in bf16, because a quantized
+    # checkpoint needs its kernel package installed (autoawq / gptqmodel /
+    # bitsandbytes) and those often lack kernels for the newest GPUs. 32B in
+    # bf16 is ~65 GB and fits a 96 GB card outright; swap to an AWQ id when
+    # the kernels are available and VRAM is tighter.
+    MODEL: str = "Qwen/Qwen2.5-32B-Instruct"
+    FALLBACKS: tuple[str, ...] = ("Qwen/Qwen2.5-14B-Instruct", "Qwen/Qwen2.5-7B-Instruct")
     LOAD: str = "auto"                        # auto | awq | gptq | bnb4 | native
     MAX_NEW_TOKENS: int = 12
     BATCH_SIZE: int = 16
@@ -2798,9 +2822,9 @@ class JudgeConfig:
     FREE_AFTER: bool = True
 
 
-JUDGE = JudgeConfig()
+JUDGE = JudgeConfig(ENABLED=True)
 
-_JUDGE_PROMPT = (
+JUDGE_PROMPT = (
     "You are grading one short answer against a reference answer. "
     "Judge only semantic equivalence: is the given answer the same fact/value as the reference? "
     "Ignore wording, formatting, capitalisation and extra words.\n\n"
@@ -2812,7 +2836,7 @@ _JUDGE_PROMPT = (
 )
 
 
-def _load_judge(jc: JudgeConfig, cfg: Config):
+def load_judge(jc: JudgeConfig, cfg: Config):
     from transformers import AutoModelForCausalLM as _AM, AutoTokenizer as _AT
     last_err = None
     for mid in (jc.MODEL, *jc.FALLBACKS):
@@ -2821,7 +2845,19 @@ def _load_judge(jc: JudgeConfig, cfg: Config):
                                           attn_implementation=cfg.ATTN_IMPL)
             mode = jc.LOAD
             if mode == "auto":
-                mode = "awq" if "awq" in mid.lower() else ("gptq" if "gptq" in mid.lower() else "bnb4")
+                # Resolve to something the environment can actually load: a
+                # pre-quantized checkpoint needs its kernel package, and bnb4
+                # needs bitsandbytes. With none present, run native and let
+                # VRAM decide (the fallback ladder handles "too big").
+                if "awq" in mid.lower() and importlib.util.find_spec("awq"):
+                    mode = "awq"
+                elif "gptq" in mid.lower() and (importlib.util.find_spec("gptqmodel")
+                                                or importlib.util.find_spec("auto_gptq")):
+                    mode = "gptq"
+                elif importlib.util.find_spec("bitsandbytes"):
+                    mode = "bnb4"
+                else:
+                    mode = "native"
             if mode in ("awq", "gptq"):
                 kwargs["torch_dtype"] = torch.float16
             elif mode == "bnb4":
@@ -2845,7 +2881,7 @@ def _load_judge(jc: JudgeConfig, cfg: Config):
     raise RuntimeError(f"no judge model could be loaded. last error: {last_err}")
 
 
-def _judge_targets(graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) -> pd.DataFrame:
+def judge_targets(graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) -> pd.DataFrame:
     g = graded[graded.answer.notna()].copy()
     parts = []
     if "all" in jc.TARGETS:
@@ -2872,7 +2908,7 @@ def stage_judge(bank: dict, graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) 
     """Runs after everything else. Idempotent and resumable like every stage."""
     if not jc.ENABLED:
         return {"enabled": False}
-    targets = _judge_targets(graded, jc, cfg)
+    targets = judge_targets(graded, jc, cfg)
     ck = Checkpoint(PATHS["derived"] / "judge.jsonl",
                     ("model", "tier", "qid", "variant", "sample_idx"), cfg.CHECKPOINT_EVERY, cfg.RESUME)
     todo = [r for r in targets.itertuples()
@@ -2881,13 +2917,13 @@ def stage_judge(bank: dict, graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) 
 
     if todo:
         qtext = {r["qid"]: r["question"] for t in bank for r in bank[t]}
-        jm = _load_judge(jc, cfg)
+        jm = load_judge(jc, cfg)
         try:
             for i in tqdm(range(0, len(todo), jc.BATCH_SIZE), desc="judge", leave=False):
                 chunk = todo[i : i + jc.BATCH_SIZE]
                 prompts = []
                 for r in chunk:
-                    msgs = [{"role": "user", "content": _JUDGE_PROMPT.format(
+                    msgs = [{"role": "user", "content": JUDGE_PROMPT.format(
                         question=qtext.get(r.qid, ""), gold=r.gold, pred=r.answer)}]
                     prompts.append(jm.tokenizer.apply_chat_template(msgs, tokenize=False,
                                                                     add_generation_prompt=True))
@@ -2897,7 +2933,7 @@ def stage_judge(bank: dict, graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) 
                                         pad_token_id=jm.tokenizer.pad_token_id)
                 texts = jm.tokenizer.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
                 for r, t in zip(chunk, texts):
-                    v = (_grab(t, "VERDICT") or t or "").upper()
+                    v = (grab(t, "VERDICT") or t or "").upper()
                     verdict = True if "CORRECT" in v and "INCORRECT" not in v else (
                         False if "INCORRECT" in v else None)
                     ck.add({"model": r.model, "tier": r.tier, "qid": r.qid, "variant": r.variant,
@@ -3013,7 +3049,7 @@ def save_fig(fig, name: str, cfg: Config, caption: str = "") -> list[Path]:
     return paths
 
 
-def _reliability_curve(p: np.ndarray, y: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def reliability_curve(p: np.ndarray, y: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     edges = np.linspace(0, 1, bins + 1)
     idx = np.clip(np.digitize(p, edges[1:-1]), 0, bins - 1)
     xs, ys, ns = [], [], []
@@ -3042,13 +3078,13 @@ def fig1_calibration(signals: pd.DataFrame, h1: dict, cfg: Config) -> None:
         if len(d) < 20:
             continue
         p, y = d[f"{sig}_cal"].values, d["correct"].values.astype(float)
-        xs, ys, ns = _reliability_curve(p, y, cfg.ECE_BINS)
+        xs, ys, ns = reliability_curve(p, y, cfg.ECE_BINS)
         if not len(xs):
             continue
         boots = []
         for _ in range(300):
             i = rng.integers(0, len(p), len(p))
-            bx, by, _ = _reliability_curve(p[i], y[i], cfg.ECE_BINS)
+            bx, by, _ = reliability_curve(p[i], y[i], cfg.ECE_BINS)
             if len(bx) == len(xs):
                 boots.append(by)
         c = SIGNAL_COLOR[sig]
@@ -3471,7 +3507,7 @@ def stage_report(bank: dict, commitments: dict, h0: dict, h1: dict, h2: dict, h3
 # ============================================================================
 
 
-def _timed(stage: str, model: str, fn: Callable, *args) -> dict:
+def timed(stage: str, model: str, fn: Callable, *args) -> dict:
     t0 = time.time()
     res = fn(*args)
     for tier_key, st in (res or {}).items():
@@ -3495,15 +3531,15 @@ def run_generation_stages_for_model(model: str, bank: dict, committed: set[str],
     try:
         lm = load_model(model, cfg)
         if "pilot" in cfg.STAGES:
-            _timed("pilot", model, stage_pilot, lm, bank, sub)
+            timed("pilot", model, stage_pilot, lm, bank, sub)
         if "verbal" in cfg.STAGES:
-            _timed("verbal", model, stage_verbal, lm, bank, sub, committed)
+            timed("verbal", model, stage_verbal, lm, bank, sub, committed)
         if "forced" in cfg.STAGES:
-            _timed("forced", model, stage_forced, lm, bank, sub, committed)
+            timed("forced", model, stage_forced, lm, bank, sub, committed)
         if "sample" in cfg.STAGES:
-            _timed("sample", model, stage_sample, lm, bank, sub, committed)
+            timed("sample", model, stage_sample, lm, bank, sub, committed)
         if "extract" in cfg.STAGES:
-            _timed("extract", model, stage_extract, lm, bank, sub, committed)
+            timed("extract", model, stage_extract, lm, bank, sub, committed)
     except Exception as exc:                              # noqa: BLE001
         LOG.log("model_failed", model=model, error=f"{type(exc).__name__}: {exc}")
         raise
@@ -3511,7 +3547,7 @@ def run_generation_stages_for_model(model: str, bank: dict, committed: set[str],
         free_model(lm, cfg)                               # <-- clear GPU memory after every model
 
 
-def _replica_tier_shards(tiers: list[str], n: int) -> list[list[str]]:
+def replica_tier_shards(tiers: list[str], n: int) -> list[list[str]]:
     return [tiers[i::n] for i in range(min(n, len(tiers)))]
 
 
@@ -3546,7 +3582,7 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
     if gen_stages:
         gcfg = replace(cfg, STAGES=gen_stages)
         for wave in plan_model_batches(cfg.active_models(), cfg):
-            shards = _replica_tier_shards(cfg.active_tiers(), cfg.MODEL_REPLICAS) \
+            shards = replica_tier_shards(cfg.active_tiers(), cfg.MODEL_REPLICAS) \
                 if cfg.MODEL_REPLICAS > 1 else [None]
             jobs = [(m, sh) for m in wave for sh in shards]
             if len(jobs) == 1:
