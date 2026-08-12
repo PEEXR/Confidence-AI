@@ -1,13 +1,27 @@
-# Genuine vs. Hopeful Confidence in LLMs — Research Plan (v2)
+# Genuine vs. Hopeful Confidence in LLMs — Research Plan (v3)
 
-> **Revision note (Aug 2026):** This version merges all four items from
-> CHANGES.md into the base plan, and updates Section 9/10 with the
-> model-selection decisions from the hardware sizing discussion (full
-> precision small model instead of a quantized larger one — rationale below).
+> **Revision note (Aug 2026):** This is the final revision. It merges
+> CHANGESforPLANv3.md into v2: the dataset is now a fixed six-tier
+> retrieval→reasoning ladder (§3); the model ladder is the Qwen2.5 same-family
+> Instruct series plus a 7B base-vs-Instruct H3 pair (§9); hardware moved to
+> Kaggle's 2× T4 runtime (§10); internal-confidence extraction sweeps five
+> fixed depth percentiles via forward hooks (§6); and the analysis headline
+> became a Murphy decomposition plus one hierarchical logistic regression
+> pooled across the grid (§8). H4 is added as a new hypothesis (§13).
 
 ## 0. Status
 
 **Status: pre-registration — no runs yet.**
+
+**Open items carried into v3 (each is tracked as a standing risk, §16):**
+1. The §15 depth-curve figure stub (`plots/fig4_depth_prediction.py`) has not
+   been written yet — it must be pre-registered before any run (§17.3).
+2. The 30-cell compute budget (5 model variants × 6 tiers) needs a sanity
+   check against the 30 GPU-hr/week Kaggle cap before all cells commit to the
+   2000-question target (§10).
+3. Qwen2.5-7B-base must be confirmed to yield usable output for the
+   verbalized-confidence formats before E1/E2 assumptions port over to the H3
+   comparison (§9 flag).
 
 ## 1. Research question
 
@@ -25,9 +39,17 @@ The core finding to look for: cases of **"hopeful" / performed confidence**
 **genuine confidence** (all three agree) vs. **suppressed confidence**
 (model hedges in words despite internals/behavior showing real knowledge).
 
-Headline metric: for each signal, how well-calibrated is it against ground
-truth (ECE, Brier score), and how much do the three disagree with each other
-(Spearman correlation + quadrant analysis of mismatches)?
+Orthogonal axis this plan fixes: **task type**. The question set is a fixed
+six-tier retrieval→reasoning ladder (§3), so the *depth at which internal
+confidence separates from chance* can be contrasted across task type and
+model scale as its own finding (H4, §13) rather than being an incidental
+artifact of dataset choice.
+
+Headline metrics: per-signal reliability and resolution from the Murphy
+decomposition of Brier (§8); per-signal ECE/Brier on the test split for the
+three-signal calibration comparison (H1); how much the three disagree with
+each other (Spearman correlation + quadrant analysis of mismatches); and the
+depth-of-signal contrast across task type and scale (H4).
 
 > Pre-registration apparatus: hypotheses [§13](#hypotheses), controls
 > [§14](#controls), predicted results [§15](#predicted-results), checkpoints
@@ -59,32 +81,51 @@ truth (ECE, Brier score), and how much do the three disagree with each other
 
 **Scope honesty:** LLM calibration is a crowded field. The contribution here
 is not "confidence is a new topic," it's a clean three-signal comparison on a
-small model with characterization of the disagreement cases.
+small same-family model ladder (0.5B–7B) with characterization of the
+disagreement cases, plus a controlled retrieval-vs-reasoning depth-of-signal
+contrast (H4).
 
 ## 3. Dataset
 
-- **PopQA** (preferred — has built-in popularity/difficulty score) or
-  **SimpleQA** (adversarially filtered, good error rate for interesting
-  calibration curves).
-- **AA-Omniscience** (Artificial Analysis) as a third option — 6,000
-  questions, domain-tagged, explicitly designed to separate correct /
-  incorrect / abstained rather than just correct/incorrect. Likely a better
-  fit than PopQA for the calibration angle specifically.
-  - Check whether the public HuggingFace subset has enough coverage and
-    question variety for the 300–500 question target; if too thin, fall
-    back to PopQA/SimpleQA, or mix both (stratify by domain from
-    AA-Omniscience, backfill volume from PopQA).
-  - Domain tags from AA-Omniscience (Business, Humanities & Social Sciences,
-    Law, Health, Science/Engineering/Math, Software Engineering) can be
-    reused directly as the stratification variable instead of building one
-    from popularity scores.
-- 300–500 questions, stratified across the difficulty range (or by domain,
-  if using AA-Omniscience).
-- Split: **60% train / 20% calibration / 20% test** (or k-fold if the set
-  ends up too thin to split three ways reliably).
+A fixed **six-tier ladder** — no single-dataset design. All tiers are
+free-response with a short canonical answer, so one grader family (§7) covers
+the whole ladder; there is no format confound between tiers.
+
+| Tier | Source | Type | Difficulty from | Answer form |
+|---|---|---|---|---|
+| R1 | PopQA, top popularity quintile | Retrieval | Popularity score | Short entity |
+| R2 | PopQA, bottom quintile | Retrieval | Popularity score | Short entity |
+| R3 | SimpleQA | Retrieval, adversarial | Dataset design | Short |
+| C1 | GSM8K | Reasoning | — | Numeric |
+| C2 | MATH, levels 1–2 | Reasoning | Built-in level | Short LaTeX |
+| C3 | MATH, levels 4–5 | Reasoning | Built-in level | Short LaTeX |
+
+**Dropped:** AA-Omniscience as the primary dataset (superseded by the ladder
+structure — its domain tags are no longer needed as the stratification
+variable). ChemBench as a scored ladder rung (organic-chem subset n=429 too
+small to split reliably; 2,544 MCQ vs. 244 open-ended mixes answer format
+with difficulty).
+
+**Retained, demoted:** ChemBench stays available as an optional held-out
+generalization check on the largest model only — not part of the scored grid.
+
+**Rationale:** the ladder is what makes H4 (retrieval vs. reasoning) testable
+as a controlled gradient rather than an incidental dataset choice — difficulty
+comes from within-dataset gradients (PopQA popularity, MATH level), so domain,
+format, and grader stay held constant across the retrieval→reasoning move.
+
+**Per-cell pipeline:**
+- **Pilot 100 questions per cell first.** Keep only cells landing in the
+  25–80% accuracy band before committing to the full target (the §8
+  difficulty-definition rule).
+- **Full target: ~2000 questions per cell** for cells that clear the pilot —
+  a ceiling, not a blind per-cell default. A ragged grid (some cells
+  excluded) is an acceptable, reportable outcome.
+- Split inside each cell: **60% train / 20% calibration / 20% test**.
 - **Sanity check before running the full pipeline:** hand-verify correctness
-  on 50–100 questions. If automated grading disagrees with manual check on
-  more than ~5%, fix grading before trusting downstream numbers.
+  on 50–100 questions per grader family. If automated grading disagrees with
+  manual check on more than ~5%, fix grading before trusting downstream
+  numbers (Gate 1, §16).
 
 ## 4. Signal 1 — Verbalized confidence
 
@@ -166,19 +207,26 @@ original hedge.
 
 ## 6. Signal 3 — Internal confidence (linear probe)
 
-1. **Single greedy forward pass** per question (temperature=0),
-   `output_hidden_states=True`. This is deliberately cheap — one pass, not
-   ten — since the point is testing whether internals recover the behavioral
-   signal without the sampling cost.
-2. **Extract hidden state** at the **last prompt token** position (start
-   here — cleaner than last-generated-token, no look-ahead bias from the
-   model's own answer).
-3. **Sweep layers** (e.g. every 3rd–4th layer across depth) — don't assume
-   which layer wins, it's model-dependent. Usually mid-to-late layers.
-4. **Train logistic regression per layer** on (hidden_state → correct/
-   incorrect), with `StandardScaler` first. Use a 1-layer MLP or PCA
-   pre-reduction only if logistic regression clearly underfits (train
-   AUROC < ~0.65).
+1. **Single greedy forward pass** per question (temperature=0). Deliberately
+   cheap — one pass, not ten — since the point is testing whether internals
+   recover the behavioral signal without the sampling cost.
+2. **Extract hidden state at the last prompt token position** only — no
+   during-generation / multi-timestep probing (see note below). Cleaner than
+   last-generated-token, no look-ahead bias from the model's own answer.
+3. **Sweep five fixed depth percentiles** per question at that one position —
+   same position, different layer, isolating depth as the sole swept
+   variable:
+
+   | Model | 0% | 25% | 50% | 75% | 100% |
+   |---|---|---|---|---|---|
+   | 0.5B (24 layers) | 0 | 6 | 12 | 18 | 24 |
+   | 1.5B (28 layers) | 0 | 7 | 14 | 21 | 28 |
+   | 3B (36 layers) | 0 | 9 | 18 | 27 | 36 |
+   | 7B (28 layers) | 0 | 7 | 14 | 21 | 28 |
+
+4. **Train one logistic regression per (question set × percentile)**, with
+   `StandardScaler` first. Use a 1-layer MLP or PCA pre-reduction only if
+   logistic regression clearly underfits (train AUROC < ~0.65).
 5. **Label options:**
    - Binary: ground-truth correctness
    - Continuous: the semantic entropy value from Signal 2 (this is the
@@ -186,9 +234,28 @@ original hedge.
      directly tests "does a single forward pass recover the 10-sample
      behavioral signal?")
 6. **Select best layer** by AUROC on the **calibration** split (never on
-   train).
-7. **Calibrate** the winning probe's raw output via isotonic regression
+   train). The single winning layer remains the headline number per cell.
+7. **Report the full 5-point sweep as a depth curve** — AUROC vs. layer
+   percentile, one line per tier, faceted by model size. That figure is the
+   direct visual test of H4 (§13).
+8. **Calibrate** the winning probe's raw output via isotonic regression
    fit on the calibration split, applied to the test split.
+
+**Extraction mechanics:** `output_hidden_states=True` is out — it
+materializes every layer × every token position (tens of GB at this question
+count, blows the output cap). Replaced by forward hooks that grab only the
+five percentile-layer vectors at the last prompt token. Storage going from
+1 layer to 5 per question: ~40KB/question instead of ~8KB — still trivial
+against the cap even at 2000 questions × 6 tiers × 5 model variants.
+
+**Explicitly not doing:** probing at multiple token positions during
+generation (i.e., after 25%/50%/75% of the generated answer). That is a
+different, currently crowded area of the literature (multiple 2025–2026
+papers already probe hidden states across CoT generation steps, including
+scale sweeps on reasoning benchmarks). Keeping extraction at the
+last-prompt-token position and sweeping only depth keeps this project in a
+comparatively open lane: pre-generation depth-of-signal, contrasted across
+task type (retrieval vs. reasoning) and model scale, together.
 
 **Note on "training":** the base model itself is never fine-tuned anywhere
 in this pipeline (see Section 10). The logistic regression / MLP here is a
@@ -219,14 +286,33 @@ magnitudes.
 2. Apply each function to the **test** split. Now `calibrated_verbal`,
    `calibrated_behavioral`, `calibrated_internal` are genuine P(correct)
    estimates on the same held-out questions.
-3. **Metrics to report:**
-   - ECE and Brier score per signal against ground truth (test split)
-   - Pairwise Spearman correlation between the three raw signals (doesn't
-     require calibration — rank-order only)
-   - Pairwise Pearson correlation between the three *calibrated* signals
-     (magnitude comparison — requires calibration to be meaningful)
+3. **Headline metric — Murphy decomposition, not raw per-cell ECE/Brier.**
+   With 30 cells at varying base rates, "calibration improved" would be
+   inseparable from "accuracy improved." Instead decompose Brier into three
+   additive components and report them separately per signal:
+   - **Reliability** (calibration component)
+   - **Resolution** (discrimination component)
+   - **Uncertainty** (base-rate component, reported for context)
+   Report reliability and resolution per signal instead of raw Brier.
+4. **One hierarchical logistic regression pooled across the whole grid** (not
+   30 independent per-cell estimates), with question-level random effects:
+   ```
+   correct ~ verbal + behavioral + internal(best_layer) +
+             tier + log(params) +
+             tier:internal +            # does probe validity drop on reasoning?
+             log(params):internal +     # does probe validity rise with scale?
+             layer_pct:tier             # does signal-onset depth shift by task type?
+   ```
+5. **Difficulty control:** difficulty is defined per-model via the 100-question
+   pilot (§3), keeping cells in the 25–80% accuracy band.
+6. **Verbal signal pre-flight:** exclude a cell from the verbal comparison if
+   it produces fewer than ~3 distinct confidence values — exclusion, not
+   reporting it as "poorly calibrated."
+7. **Other metrics to report:**
+   - Pairwise Spearman correlation between the three raw signals (rank-order
+     only, no calibration required) — raw; Pearson on calibrated.
    - **Omniscience-Index** (decision-level companion metric — see 8.2)
-4. **Quadrant / mismatch analysis** — pull actual examples:
+8. **Quadrant / mismatch analysis** — pull actual examples:
    - High verbal + low behavioral/internal → **"hopeful" / performed
      confidence** (likely headline finding)
    - Low verbal + high behavioral/internal → suppressed confidence /
@@ -236,17 +322,17 @@ magnitudes.
      report alongside the verbal-hedging cases, not as a separate category
    - Characterize what kinds of questions land in each quadrant (long-tail
      entities, dates, ambiguous phrasing, etc.)
-5. **Per-model comparison** (baseline vs. comparison model, Section 9): run
-   1–4 above for each model separately, then report deltas — specifically,
-   does the abstention-trained comparison model show a lower rate of
-   high-verbal/low-behavioral-or-internal ("hopeful confidence") cases than
-   the baseline? Report ECE/Brier for both models side by side; the delta
-   between them is the actual finding, not just two separate result tables.
+9. **Per-model comparison:** run 1–8 above for each model separately, then
+   report deltas — specifically, does the instructed model (7B-Instruct)
+   show a lower rate of high-verbal/low-behavioral-or-internal ("hopeful
+   confidence") cases than its base counterpart (7B-base)? Report per-cell
+   decomposition side by side; the delta between them is the actual finding,
+   not just two separate result tables.
 
-**If the dataset is too small for calibration to be trustworthy:** drop
-magnitude comparison, keep Spearman correlation + raw-score quadrant
-bucketing, and state this as an explicit scope limitation in the writeup —
-that's a legitimate call, not a flaw.
+**If the dataset (any cell) is too small for calibration to be trustworthy:**
+drop magnitude comparison for that cell, keep Spearman correlation + raw-score
+quadrant bucketing, and state this as an explicit scope limitation in the
+writeup — that's a legitimate call, not a flaw.
 
 ### 8.2 Omniscience-Index
 
@@ -262,9 +348,9 @@ Index = (n_correct − n_incorrect) / n_total × 100
 - +1 for correct, −1 for incorrect, 0 for abstained (Format C Pass) — no
   penalty for abstaining itself, since there's no observable counterfactual
   for an unanswered question.
-- Report per model (baseline vs. comparison, Section 9) and per domain if
-  using AA-Omniscience's domain tags.
-- Companion summary statistic, not a replacement for ECE/Brier — keep both.
+- Report per model (base vs Instruct, Section 9) and per tier.
+- Companion summary statistic, not a replacement for reliability/resolution —
+  keep both.
 
 **Why abstain = 0 and not split into +1/−1:** a benchmark score can only
 grade what was actually observed. An abstained question has no produced
@@ -277,71 +363,87 @@ numbers for other models.
 
 ## 9. Models
 
-Two models, run through the full pipeline (Sections 4–8) independently, then
-compared:
+**Main scaling ladder** — Qwen2.5 same-family Instruct models, each run
+through the full pipeline (Sections 4–8) independently:
 
-**Baseline — no explicit abstention training:**
-- **Qwen3.5-0.8B** (preferred) — full precision (FP16/BF16), no
-  quantization. ~1.9GB VRAM for weights + KV cache, leaving ample headroom
-  for `output_hidden_states=True` extraction on an 8GB card.
-- **Llama 3.2 1B Instruct** (alternative) — full precision, ~3GB VRAM for
-  weights + KV cache. Slightly more world knowledge than the 0.8B Qwen
-  model at the cost of a bit less headroom.
-- Either is deliberately small. The research question is about *signal
-  disagreement*, not model capability — see Section 9.1 for the reasoning
-  behind choosing small-and-full-precision over larger-and-quantized.
+| Model | Layers | Hidden dim | VRAM (FP16) |
+|---|---|---|---|
+| Qwen2.5-0.5B-Instruct | 24 | 896 | ~1 GB |
+| Qwen2.5-1.5B-Instruct | 28 | 1536 | ~3 GB |
+| Qwen2.5-3B-Instruct | 36 | 2048 | ~6 GB |
+| Qwen2.5-7B-Instruct | 28 | 3584 | ~14 GB |
 
-**Comparison — abstention-trained:**
-- **LFM2.5-8B-A1B** (Liquid AI) — explicitly RL-trained for abstention
-  (avg@k-based reward reinforcing abstention beyond reliable knowledge).
-  Running the full three-signal pipeline on it turns the project from pure
-  characterization into a real comparison: does abstention-RL training
-  reduce the "hopeful confidence" mismatch rate compared to a model that
-  never received that training?
-- Mixture-of-Experts, ~1B active params — confirm `output_hidden_states`
-  extraction works cleanly through the MoE routing before assuming
-  Section 6's probe pipeline ports over unchanged. Routing may affect which
-  layer/position carries the clearest signal, so a **fresh layer sweep is
-  needed** rather than reusing whatever layer won for the baseline model.
-- ~1B active params should run comfortably on the RX 6600, likely more
-  comfortably than the baseline for the N=10 sampling step in Section 5.
+Instruct variants throughout, since verbalized-confidence elicitation (§4,
+formats A/B/C) needs a model that reliably follows the elicitation prompt —
+base models are a poor fit for that.
 
-### 9.1 Why small + full precision instead of large + quantized
+**H3 comparison pair** (fixed scale, post-training contrast):
 
-Signal 3's linear probes train directly on hidden states — quantization
-noise corrupts that feature space in ways that are hard to distinguish from
-genuine calibration signal. Since accuracy is not the outcome being
-measured (disagreement *between* signals is), a smaller full-precision
-model gives cleaner, more interpretable activations than a larger quantized
-one, without sacrificing anything the research question actually needs.
-Smaller models also tend to show clearer overconfidence effects, which
-likely makes the quadrant mismatches in Section 8 more visible rather than
-weaker.
+- **Qwen2.5-7B (base)** vs. **Qwen2.5-7B-Instruct** (already the top rung of
+  the ladder above — no extra model needed on that side). The base model is
+  added *only* as the H3 comparison point, not as a ladder rung.
 
-## 10. Hardware / compute notes
+**Dropped:** LFM2.5-8B-A1B entirely. It had a genuine VRAM bug in v2 (MoE
+reduces compute, not memory — all ~8B expert weights must be resident, ~16GB
+at FP16) and, independent of that, confounded H3 against lab/data/
+architecture differences rather than isolating post-training.
 
-- **No fine-tuning anywhere in this pipeline.** Both models run in
+### 9.1 Why same-family scaling + full precision instead of large/quantized
+
+1. **Same-family scaling keeps architecture held constant** across the scale
+   axis — depth, width, head count change; nothing else. Any depth-of-signal
+   differences across size are attributable to scale itself, not to
+   architecture-family changes (this is the H4 scale axis).
+2. **Full precision = clean activations.** Signal 3's linear probes train
+   directly on hidden states; quantization noise corrupts that feature space
+   in ways that are hard to distinguish from genuine calibration signal.
+3. **Base-vs-Instruct is a method-matched contrast:** same weights, same
+   pretraining data, differs by post-training only. Directly answers "does
+   instruction-tuning change the hopeful/suppressed confidence mismatch
+   rate" without the MoE/lab confound.
+4. Smaller models tend to show clearer overconfidence effects, which likely
+   makes the quadrant mismatches in Section 8 more visible rather than
+   weaker.
+
+**Flag for implementation — base-model elicitation:** confirm before running
+E1 (format agreement) that Qwen2.5-7B-base can produce usable output for the
+verbalized-confidence formats (§4). Base models are generally worse at
+instruction following, so this may need a modified prompt or a documented
+limitation. Standing risk (§16).
+
+## 10. Hardware / compute notes — Kaggle
+
+- **No fine-tuning anywhere in this pipeline.** All models run in
   inference-only mode across all three signals; the only things "trained"
   are the small auxiliary models in Sections 6 and 8 (logistic regression,
   isotonic/Platt calibration) fit on extracted features on CPU — negligible
-  VRAM cost, no gradients touch the base model. This avoids the ~4x
-  gradient/optimizer-state overhead fine-tuning would otherwise add.
-- **VRAM budget (RX 6600, 8GB), full precision, no quantization:**
-  - Qwen3.5-0.8B: ~1.9GB weights + KV cache → ~6GB headroom for hidden-state
-    extraction.
-  - Llama 3.2 1B: ~3GB weights + KV cache → ~5GB headroom.
-  - LFM2.5-8B-A1B (MoE, ~1B active): comparable or better headroom than the
-    dense baseline for the N=10 sampling step.
+  VRAM cost, no gradients touch the base model. The base models stay frozen.
+- **GPU: 2× NVIDIA T4, 16GB each, no NVLink.** Not a pooled 30GB —
+  per-device ceiling is 16GB. Use both as independent workers (split
+  questions across devices) rather than sharding; nothing in the current
+  model ladder needs sharding, since 7B fits a single T4.
+- **~30 GPU-hours/week, ~12-hour session cap.** Every long job must
+  checkpoint and resume by question ID.
+- **`/kaggle/working` is the only persistent output space.** Cache model
+  weights as a Kaggle Dataset (mount read-only) to avoid re-pulling ~15GB
+  from HF every session.
+- **P100 fallback:** hardware allocation isn't guaranteed; write
+  device-detection into the loading code rather than hardcoding two T4s.
+- **T4 is Turing: no native BF16.** Qwen2.5 ships in BF16; running FP16-only
+  risks occasional inf/NaN in later-layer activations. This is an explicit
+  checked risk, not an assumed non-issue — Gate 3 runs a mandatory finiteness
+  pre-check (§16).
+- **Compute budget note.** Full grid = 5 model variants × 6 tiers = 30 cells.
+  At ~2000 questions/cell (N=10 sampling is minutes at 1.5B, one to two hours
+  at 7B), a 4-model × 4-tier grid lands in the 10–15 GPU-hour range. Re-check
+  the 30-cell budget against the 30 GPU-hr/week cap before committing all
+  cells to the full 2000-question target (standing risk, §16).
 - The **N=10 sampling step** for semantic entropy (Section 5) is the
   expensive part regardless of model size — batch it, keep question count
-  modest (few hundred) until the pipeline is validated end-to-end, then
-  scale up if compute allows.
-- `output_hidden_states=True` is the memory-spiking step (storing all
-  layers × seq_len × hidden_dim) regardless of model size. Use
-  `torch.cuda.empty_cache()` between batches, and drop to batch size 1–2 or
-  per-layer extraction (rather than storing all layers at once) if hitting
-  OOM — unlikely at this model scale, but worth guarding against on longer
-  sequences.
+  modest until the pipeline is validated end-to-end, then scale up.
+- **Extraction memory:** forward hooks grab only the five percentile-layer
+  vectors at the last prompt token (§6) — no `output_hidden_states=True`
+  materialization; call `torch.cuda.empty_cache()` between batches.
 
 ## 11. Stretch goal
 
@@ -424,23 +526,50 @@ data — an estimator chosen after the curves are seen is not an estimator.
 
 ### H3 · tier 3 · requires comparison model (§9)
 
-- **Statement.** Abstention-RL training reduces "hopeful" confidence without
-  trading it for blanket hedging.
-- **Predicts.** LFM2.5-8B-A1B shows a lower rate of hopeful-confidence cases
-  (high verbal, low behavioral/internal) than the baseline Qwen3.5-0.8B, and
-  the reduction is not offset by a rise in "missed knowledge" (suppressed)
-  cases (§4.1).
+- **Statement.** Post-training (instruction tuning) reduces "hopeful"
+  confidence without trading it for blanket hedging.
+- **Predicts.** Qwen2.5-7B-Instruct shows a lower rate of hopeful-confidence
+  cases (high verbal, low behavioral/internal) than its base counterpart
+  Qwen2.5-7B, and the reduction is not offset by a rise in "missed knowledge"
+  (suppressed) cases (§4.1).
 - **Falsified if.** The delta in hopeful-confidence rate between models has a
   CI including 0, or abstention is explained by blanket hedging (the
   missed-knowledge guard triggers).
 - **Why it matters.** Turns pure characterisation into a comparison: is
-  calibration trainable, and does the training do the right thing rather than
-  just hedge more?
+  calibration trainable, and does the post-training do the right thing rather
+  than just hedge more? Same weights and pretraining data — differs by
+  post-training only (§9.1).
 - **Estimator + pass rule.** Bootstrap CI on the difference of
-  hopeful-confidence rates (baseline − LFM) on matched question sets; pass if
+  hopeful-confidence rates (base − Instruct) on matched question sets; pass if
   the lower bound > 0 AND the missed-knowledge rate does not rise by ≥ the
   amount hopeful confidence falls.
-- **Experiment.** E5, E6.
+- **Experiment.** E6.
+
+### H4 · tier 3 · requires full ladder + percentile sweep (§3, §6, §9)
+
+- **Statement.** The depth at which internal confidence separates from chance
+  depends on task type: for retrieval, probe AUROC beats chance by ~0% depth;
+  for reasoning, probe validity onsets later (higher layer percentile) and may
+  not beat chance at small scale.
+- **Predicts.** On the calibration split, retrieval tiers (R1/R2/R3) reach a
+  winning-layer AUROC ≥ 0.65 at a lower depth percentile, with a higher
+  asymptote, than reasoning tiers (C1/C2/C3); larger models onset earlier and
+  asymptote higher. The depth curve (§6 · 7) is the direct visual test.
+- **Falsified if.** Depth curves for retrieval and reasoning overlap in onset
+  percentile, or no percentile reaches AUROC ≥ 0.65 for reasoning at any
+  scale — with cells held in the 25–80% accuracy band (§8) to control for
+  accuracy.
+- **Why it matters.** The retrieval→reasoning gradient is the controlled
+  manipulation that makes "hopeful confidence" machine-legible: if internal
+  signal lives only in late layers for reasoning (or nowhere at small scale),
+  then verbal confidence on reasoning questions is genuinely harder to ground
+  in internals — a mechanistic explanation for H1's verbal-hot effect.
+- **Estimator + pass rule.** Per (tier × model) AUROC-vs-percentile curve on
+  the calibration split against the label-shuffle null; compare onset
+  percentile (first percentile reaching AUROC ≥ 0.65) across tiers with a
+  bootstrap CI on the onset difference; pass if the retrieval−reasoning onset
+  CI excludes 0 and Gate 3 holds for affected cells.
+- **Experiment.** E2 (ladder runs), E4 (sweep).
 
 ## 14. Controls
 
@@ -461,8 +590,11 @@ discipline.
 
 ### 14.2 Robustness & construct
 
-- **Layer sweep on the calibration split only** (§6): the winning layer is
-  selected on calibration, never on train or test.
+- **Percentile sweep on the calibration split only** (§6): the winning layer
+  is selected on calibration, never on train or test.
+- **Activation finiteness** (§6/§10): every extracted activation tensor must
+  be finite; the fraction of non-finite values is logged per layer (Gate 3
+  pre-check).
 - **Test–retest at fixed temperature** (§5): N=10 sampling at T≥0.7 must show
   real variance; a degenerate run (T=0) is excluded.
 - **Probe beats a surface/embedding baseline** (§6) before its readout means
@@ -486,7 +618,7 @@ discipline.
 - ECE/Brier with bootstrap CIs on the test split.
 - Both dose axes reported where relevant: nominal (stated) vs realised
   (calibrated P(correct)) (§8 · 1–2).
-- Omniscience-Index reported alongside ECE/Brier (§8.2).
+- Omniscience-Index reported alongside reliability/resolution (§8.2).
 - Provenance per result: seed, config hash, model version, code commit.
 - Calibration split used for calibration fitting only, never for training or
   selection.
@@ -514,12 +646,24 @@ companion. Predicted: "hopeful" and "suppressed" quadrants cluster by question
 type. Null drawn as dashed: uniform scatter, no clustering, examples drawn
 randomly across types. Stub: `plots/fig2_quadrant_prediction.py`.
 
-### Figure 3 — baseline vs LFM delta `predicted under H3`
+### Figure 3 — base vs Instruct delta `predicted under H3`
 
-Hopeful-confidence rate and missed-knowledge rate side by side for baseline
-vs LFM, with CIs. Predicted: hopeful rate drops without a matched rise in
-missed knowledge. Null drawn as dashed: overlapping bars / equal rates. Stub:
-`plots/fig3_model_delta_prediction.py`.
+Hopeful-confidence rate and missed-knowledge rate side by side for
+Qwen2.5-7B (base) vs Qwen2.5-7B-Instruct, with CIs. Predicted: hopeful rate
+drops without a matched rise in missed knowledge. Null drawn as dashed:
+overlapping bars / equal rates. Stub: `plots/fig3_model_delta_prediction.py`.
+
+### Figure 4 — depth curves `predicted under H4`
+
+AUROC vs. layer percentile, one line per tier, faceted by model size
+(§6 · 7). Predicted: retrieval tiers (R1/R2/R3) flat and high from ~0% depth;
+reasoning tiers (C1/C2/C3) at chance until late layers, with onset shifting
+earlier as scale grows. Null drawn as dashed: all tiers flat at chance,
+overlapping bands.
+
+> **Stub not yet written (open item, §0).** The pre-registered form of this
+> figure does not exist yet — a `plots/fig4_depth_prediction.py` stub must be
+> committed before any run per §17.3 process rules.
 
 ## 16. Checkpoints
 
@@ -547,30 +691,45 @@ and pass rule are fixed before any data is seen.
 ### Gate 3 — Probe validity (fires before §6 output is trusted)
 
 - **Experiment.** E4.
-- **Pass rule.** The winning layer (selected on the calibration split) beats
-  the label-shuffle null and a surface/embedding baseline, and the logistic
-  train AUROC ≥ 0.65.
-- **If it fails.** Upgrade to a 1-layer MLP / PCA pre-reduction; if still
-  below bar, drop the internal signal and report "probe fails positive
+- **Pass rule.** For each (tier × model) cell: the probe across the full
+  5-percentile sweep beats the label-shuffle null and the surface/embedding
+  baseline on the calibration split, with at least one percentile reaching
+  AUROC ≥ 0.65.
+- **Pre-check (before trusting any AUROC from this gate):** assert every
+  extracted activation tensor is finite; log the fraction of non-finite
+  values per layer. T4's FP16-only path is a real risk for silent corruption
+  in late layers — this turns "the probe doesn't work" from an ambiguous
+  result into a diagnosable one (dirty activations vs. genuinely no signal).
+- **If it fails.** Burn the finiteness pre-check first; if activations are
+  clean, upgrade to a 1-layer MLP / PCA pre-reduction; if still below bar,
+  drop the internal signal for that cell and report "probe fails positive
   control", or reduce to the binary label (§6 · 5).
 
 ### Gate 4 — Model comparison (fires before the H3 claim)
 
 - **Experiment.** E5, E6.
-- **Pass rule.** `output_hidden_states` extraction verified through LFM MoE
-  routing with a fresh layer sweep (§9); then the H3 delta CI excludes 0 with
-  the missed-knowledge guard.
-- **If it fails.** If MoE extraction fails: baseline-only characterisation.
-  If the delta is within noise: report the honest null — both outcomes are
-  reportable (§12).
+- **Pass rule.** Base-model elicitation verified (usable output for formats
+  A/B/C, §4 — or a documented limitation); then the H3 delta CI excludes 0
+  with the missed-knowledge guard (§13 H3).
+- **If it fails.** If elicitation fails on the base model: base-only
+  characterisation with the limitation documented. If the delta is within
+  noise: report the honest null — both outcomes are reportable (§12).
 
 ### Standing risks (re-ranked after each run)
 
-1. Dataset too small for trustworthy calibration → drop magnitude comparison,
-   keep Spearman + raw-score quadrants, state as a scope limitation (§8).
-2. MoE routing breaks the probe pipeline (§9).
-3. Forced-answer compulsion changes output — the §4.1 caveat is not optional.
-4. Grading noise dominates the mismatch quadrants → kills H2.
+1. **T4 FP16 non-finite activations** in late layers silently corrupt the
+   probe → Gate 3 finiteness pre-check; store extracted vectors in float32
+   and log the non-finite fraction (§10).
+2. **30-cell compute budget** vs. the 30 GPU-hr/week cap at 2000
+   questions/cell → re-check before committing all cells; a ragged grid is
+   an acceptable outcome (§10).
+3. **Base-model verbalized elicitation** fails or degrades on Qwen2.5-7B-base
+   → modified prompt or documented limitation (§9 flag).
+4. Dataset (any cell) too small for trustworthy calibration → drop magnitude
+   comparison, keep Spearman + raw-score quadrants, state as a scope
+   limitation (§8).
+5. Forced-answer compulsion changes output — the §4.1 caveat is not optional.
+6. Grading noise dominates the mismatch quadrants → kills H2.
 
 ## 17. Experiments
 
@@ -584,11 +743,11 @@ after each run and marked with a verdict.
 |---|---|---|---|---|
 | E0 | Dataset selection + grading sanity (§3) | manual vs automated agreement on 50–100 hand-verified questions | data quality | Gate 1 |
 | E1 | Format agreement (§4) | pairwise Spearman across formats A/B/C on the 50–100-question subset | H0 | Gate 2 |
-| E2 | Baseline main run (§4–§8) | all three signals over the full train/cal/test split; per-signal ECE/Brier, quadrant counts | H1, H2 | — |
+| E2 | Cell pilot + ladder main run (§3, §4–§8) | 100-question pilot keeps each cell in the 25–80% accuracy band; then all three signals over the surviving cells' train/cal/test split across the full ladder × model grid; per-cell Murphy decomposition + pooled hierarchical regression | H1, H2, H4 | — |
 | E3 | Forced-answer companion (§4.1) | forced-answer pass on every Format C Pass → justified-hedge vs missed-knowledge split | H2 | — |
-| E4 | Probe validity (§6) | layer sweep on the calibration split; label-shuffle null; surface/embedding baseline; logistic train AUROC | H2 | Gate 3 |
-| E5 | LFM MoE extraction check (§9) | `output_hidden_states` extraction verified through MoE routing; fresh layer sweep | infra | Gate 4 |
-| E6 | LFM main run (§9) | repeat E2/E3/E4 on the comparison model; hopeful-confidence and missed-knowledge deltas vs baseline | H3 | Gate 4 |
+| E4 | Probe validity (§6) | 5-percentile sweep on the calibration split; finiteness pre-check; label-shuffle null; surface/embedding baseline; train AUROC | H2, H4 | Gate 3 |
+| E5 | Base-model elicitation check (§9) | Qwen2.5-7B-base usable output for formats A/B/C; document limitation if not | infra | Gate 4 |
+| E6 | Post-training comparison run (§9) | repeat E2/E3/E4 on 7B-base; hopeful-confidence and missed-knowledge deltas vs 7B-Instruct | H3 | Gate 4 |
 
 ### 17.2 Run log (what actually ran)
 
@@ -609,3 +768,5 @@ each row names the design ID it addresses.
 - **Every activation measurement ships a surface / prompt-only baseline.**
 - **Measure the noise floor before interpreting any Δ.** A difference without
   a denominator is a number, not a measurement.
+- **Every long Kaggle job checkpoints and resumes by question ID** (§10);
+  a job that cannot resume is not a measurement.
