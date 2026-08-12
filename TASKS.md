@@ -8,6 +8,14 @@ cells are committed as their 100-question pilot clears the 25–80% accuracy
 band and the compute ledger (X2) allows — a ragged grid is the planned
 outcome, not a failure (PLAN §3, §10).
 
+LINKS OF DATASETS:
+https://huggingface.co/datasets/akariasai/PopQA
+https://huggingface.co/datasets/basicv8vc/SimpleQA
+https://huggingface.co/datasets/openai/gsm8k
+https://huggingface.co/datasets/qwedsacf/competition_math
+Make a variable for the number of questions chosen (SAME FOR EACH DATASET)
+Make sure that the questions aren't sorted, they must be a random sample
+
 ## 1. All tasks (by phase)
 
 | Task | What it involves | Produces | Depends on | Effort |
