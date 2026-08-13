@@ -1,0 +1,102 @@
+{
+  "qwen2.5-1.5b-instruct__C1": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 25,
+    "best_auroc_cal": 0.7655005544913802,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  },
+  "qwen2.5-1.5b-instruct__C2": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 25,
+    "best_auroc_cal": 0.8006220506220506,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  },
+  "qwen2.5-1.5b-instruct__R1": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 75,
+    "best_auroc_cal": 0.8645833333333333,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  },
+  "qwen2.5-3b-instruct__C1": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 100,
+    "best_auroc_cal": 0.6973934837092732,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  },
+  "qwen2.5-3b-instruct__C2": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 25,
+    "best_auroc_cal": 0.7045259545259546,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  },
+  "qwen2.5-3b-instruct__R1": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 75,
+    "best_auroc_cal": 0.9108693377968408,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  },
+  "qwen2.5-7b-instruct__C1": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 50,
+    "best_auroc_cal": 0.7573401534526853,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  },
+  "qwen2.5-7b-instruct__C2": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 75,
+    "best_auroc_cal": 0.6825062656641604,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  },
+  "qwen2.5-7b-instruct__C3": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 25,
+    "best_auroc_cal": 0.6687370600414079,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  },
+  "qwen2.5-7b-instruct__R1": {
+    "activations_clean": true,
+    "worst_nonfinite_frac": 0.0,
+    "best_layer_pct": 75,
+    "best_auroc_cal": 0.8496510673234812,
+    "beats_null": true,
+    "beats_surface": true,
+    "passes": true,
+    "diagnosis": "pass"
+  }
+}

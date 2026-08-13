@@ -1,0 +1,6 @@
+hypothesis,gate,passed,verdict
+H0,Gate 2,False,H0 falsified — report all three formats separately (PLAN §16 Gate 2 fallback)
+H1,—,False,"H1 falsified — CIs overlap, no ordering distinguishable"
+H2,Gate 1,True,H2 supported — quadrant membership associates with question features beyond the shuffle null
+H3,Gate 4,,H3 untested — both 7B variants required
+H4,Gate 3,False,"H4 falsified / null — onset curves overlap, or reasoning never reaches the gate"

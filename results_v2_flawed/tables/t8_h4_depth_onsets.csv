@@ -1,0 +1,14 @@
+model,tier,family,params_b,onset,reached,asymptote
+qwen2.5-1.5b-instruct,C1,reasoning,1.54,25.0,True,0.7655005544913802
+qwen2.5-1.5b-instruct,C2,reasoning,1.54,0.0,True,0.8006220506220506
+qwen2.5-1.5b-instruct,R1,retrieval,1.54,25.0,True,0.8645833333333333
+qwen2.5-3b-instruct,C1,reasoning,3.09,25.0,True,0.6973934837092732
+qwen2.5-3b-instruct,C2,reasoning,3.09,25.0,True,0.7045259545259546
+qwen2.5-3b-instruct,R1,retrieval,3.09,25.0,True,0.9108693377968408
+qwen2.5-7b-base,C1,reasoning,7.62,,False,0.5881066666666667
+qwen2.5-7b-base,C2,reasoning,7.62,,False,0.5061654135338346
+qwen2.5-7b-base,R1,retrieval,7.62,0.0,True,0.8350243506493507
+qwen2.5-7b-instruct,C1,reasoning,7.62,25.0,True,0.7573401534526853
+qwen2.5-7b-instruct,C2,reasoning,7.62,25.0,True,0.6825062656641604
+qwen2.5-7b-instruct,C3,reasoning,7.62,25.0,True,0.6687370600414079
+qwen2.5-7b-instruct,R1,retrieval,7.62,25.0,True,0.8496510673234812

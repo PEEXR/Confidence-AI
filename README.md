@@ -201,8 +201,13 @@ It's also what lets a run span sessions — set `ONLY_MODELS` to a subset,
 run, then run the rest; the question bank and checkpoints are shared.
 
 After **every** model finishes, the pipeline drops references, moves the model
-to `meta`, and calls `gc.collect()` + `empty_cache()` + `ipc_collect()`, then
-optionally deletes the HF snapshot (`PURGE_WEIGHTS_AFTER_MODEL`).
+to `meta`, and calls `gc.collect()` + `empty_cache()` + `ipc_collect()`.
+
+Disk is separate: `PURGE_WEIGHTS` is `never` / `after_model` / `after_run`.
+Note that each model is loaded **twice** — once for the pilot pass, then again
+for the real generation stages, because the band gate needs every model's
+pilot before any cell can be committed. The purge therefore fires only on a
+model's final pass; `after_run` clears the whole cache once at the end.
 
 ---
 
@@ -238,6 +243,10 @@ automated opinion, not a human.
   `probe_skipped` and Gate 3, H1 and H4 come back empty. That is a guard, not
   a bug — a probe fitted on 3 points validated on 1 would report noise as
   signal. Set `SMOKE = False` and all of it populates.
+- Probe labels come from the `EXTRACT` variant (the greedy pass whose
+  activations were tapped). If that stage was skipped, it falls back to
+  `FORCED` and then to a `SAMPLE` draw, logging `probe_label_fallback` — a
+  `SAMPLE` label is noise relative to its paired activation.
 - The judge needs a quantization kernel package for any AWQ/GPTQ id. Without
   one it falls back to native bf16, which is why the default is a 32B rather
   than a 72B.

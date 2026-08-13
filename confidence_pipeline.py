@@ -277,7 +277,7 @@ MODEL_SPECS: dict[str, dict] = {
 @dataclass
 class Config:
     # ---------------------------------------------------------- identity --
-    RUN_NAME: str = "run01"
+    RUN_NAME: str = "full1000"
     SEED: int = 20260813
     NOTES: str = "pre-registered run per PLAN.md v3"
 
@@ -344,7 +344,11 @@ class Config:
     # copy of the weights — a single replica at N x the batch size is strictly
     # better unless you are CPU-bound on the generate loop.
     MODEL_REPLICAS: int = 1
-    PURGE_WEIGHTS_AFTER_MODEL: bool = False  # delete the HF snapshot after a model finishes
+    # never       - keep every snapshot (best on molab; disk is effectively free)
+    # after_model - delete a model's snapshot once it finishes its FINAL pass
+    #               (never after the pilot pass, or it would re-download)
+    # after_run   - delete the whole hub cache once, at the very end
+    PURGE_WEIGHTS: str = "never"        # never | after_model | after_run
     EMPTY_CACHE_EVERY_BATCHES: int = 4
 
     # ------------------------------------------------------- band gate ----
@@ -441,7 +445,7 @@ _BASE_CFG = Config()
 # also bypassed, because a 5-question pilot cannot meaningfully land in the
 # 25-80% accuracy band.
 # --------------------------------------------------------------------------
-SMOKE = True
+SMOKE = False
 
 CFG = replace(
     _BASE_CFG,
@@ -974,7 +978,7 @@ def instruction(variant: str, tier_spec: dict) -> str:
             "Reply in EXACTLY this format and nothing else:\n"
             f"{lines}ANSWER: <{style}>\n"
         )
-    elif variant == "SAMPLE":
+    elif variant in ("SAMPLE", "EXTRACT"):
         body = (
             "Answer the question.\n\n"
             "Reply in EXACTLY this format and nothing else:\n"
@@ -1014,6 +1018,7 @@ FEWSHOT_POOL = {
     ],
 }
 FEWSHOT_POOL["SAMPLE"] = FEWSHOT_POOL["FORCED"]
+FEWSHOT_POOL["EXTRACT"] = FEWSHOT_POOL["FORCED"]
 
 
 def build_prompt(variant: str, question: str, tier_spec: dict, model_spec: dict,
@@ -1051,8 +1056,29 @@ def key_regex(key: str) -> re.Pattern:
     return KEY_RE_CACHE[key]
 
 
-def grab(text: str, key: str) -> str | None:
-    """Last match wins — CoT models often restate the key after working."""
+# A few-shot prompted base model does not stop after one answer — it keeps
+# emitting "Question: ... / ANSWER: ..." pairs forever. Everything after the
+# first fabricated question belongs to a question we never asked, so it must be
+# cut before parsing. Chat models never emit this marker, so this is a no-op
+# for them and the rule can be applied uniformly.
+_NEXT_Q_RE = re.compile(r"^\s*(?:Question|Q)\s*[:：]", re.IGNORECASE | re.MULTILINE)
+
+
+def truncate_fewshot_continuation(text: str) -> str:
+    m = _NEXT_Q_RE.search(text or "")
+    return text[: m.start()] if m else text
+
+
+def grab(text: str, key: str, fewshot: bool = False) -> str | None:
+    """Last match wins — CoT models often restate the key after working.
+
+    `fewshot=True` first cuts everything from the model's own fabricated
+    follow-up question onward. Only the few-shot (base-model) path needs this;
+    applying it to chat output could truncate a CoT block that legitimately
+    contains a "Q:" line.
+    """
+    if fewshot:
+        text = truncate_fewshot_continuation(text)
     ms = key_regex(key).findall(text or "")
     for v in reversed(ms):
         if v.strip():
@@ -1100,20 +1126,20 @@ def parse_confidence_bucket(raw: str | None) -> str | None:
     return None
 
 
-def parse_response(variant: str, text: str) -> dict:
+def parse_response(variant: str, text: str, fewshot: bool = False) -> dict:
     """Never raises. `parse_ok` is False when the required fields are absent."""
     out: dict[str, Any] = {"raw_len": len(text or ""), "parse_ok": False}
-    ans = clean_answer(grab(text, "ANSWER"))
-    out["reasoning"] = grab(text, "REASONING")
+    ans = clean_answer(grab(text, "ANSWER", fewshot))
+    out["reasoning"] = grab(text, "REASONING", fewshot)
 
     if variant == "A":
-        conf = parse_confidence_numeric(grab(text, "CONFIDENCE"))
+        conf = parse_confidence_numeric(grab(text, "CONFIDENCE", fewshot))
         out.update(answer=ans, confidence=conf, parse_ok=ans is not None and conf is not None)
     elif variant == "B":
-        bucket = parse_confidence_bucket(grab(text, "CONFIDENCE"))
+        bucket = parse_confidence_bucket(grab(text, "CONFIDENCE", fewshot))
         out.update(answer=ans, bucket=bucket, parse_ok=ans is not None and bucket is not None)
     elif variant == "C":
-        dec_raw = (grab(text, "DECISION") or "").upper()
+        dec_raw = (grab(text, "DECISION", fewshot) or "").upper()
         decision = "PASS" if "PASS" in dec_raw else ("ANSWER" if "ANSWER" in dec_raw else None)
         if decision is None and ans:                    # no DECISION line but an answer given
             decision = "PASS" if (ans or "").upper() in {"NONE", "PASS", "N/A"} else "ANSWER"
@@ -1373,7 +1399,7 @@ def estimate_compute(cfg: Config, profile: str | None = None) -> pd.DataFrame:
           f"({total_h / 12:.1f} x 12-hour sessions)")
     print(f"activation storage: {df['activations_mb'].sum()/1000:.2f} GB")
     print(f"weight downloads  : {df['weights_gb'].sum():.1f} GB "
-          f"(set PURGE_WEIGHTS_AFTER_MODEL=True if storage is tight)")
+          f"(set PURGE_WEIGHTS=\"after_run\" if storage is tight)")
     if not df["fits_one_gpu"].all():
         print("\n  ! some models exceed a single GPU — device_map='auto' will shard them,")
         print("    which on 2x T4 means pipeline-parallel: roughly half the compute idles.")
@@ -1393,7 +1419,7 @@ COMPUTE_ESTIMATE = estimate_compute(CFG)
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
 
-def auto_batch_size(model_spec: dict, tier_spec: dict, cfg: Config) -> int:
+def auto_batch_size(model_spec: dict, tier_spec: dict, cfg: Config, n_return: int = 1) -> int:
     if cfg.BATCH_SIZE > 0:
         return cfg.BATCH_SIZE
     if not DEVICES["cuda"]:
@@ -1403,9 +1429,14 @@ def auto_batch_size(model_spec: dict, tier_spec: dict, cfg: Config) -> int:
         return 1
     # KV cache scales with layers x hidden x sequence; this is a deliberately
     # conservative heuristic that the runner will halve on OOM anyway.
+    # `num_return_sequences` multiplies the resident sequence count, so the
+    # N=10 sampling stage costs 10x a single-return stage at the same batch —
+    # without this divisor it OOMs on its first batch every time and only
+    # recovers via backoff.
     seq = 512 + tier_spec["max_new_tokens"]
     per_seq_gb = 2 * model_spec["layers"] * model_spec["hidden"] * seq * 2 / 1e9 * 1.6
-    bs = int(max(1, min(cfg.BATCH_SIZE_CAP, (free_gb * 0.55) / max(per_seq_gb, 1e-6))))
+    per_item_gb = per_seq_gb * max(1, n_return)
+    bs = int(max(1, min(cfg.BATCH_SIZE_CAP, (free_gb * 0.55) / max(per_item_gb, 1e-6))))
     return max(1, bs)
 
 
@@ -1442,7 +1473,7 @@ def load_model(name: str, cfg: Config) -> LoadedModel:
     return LoadedModel(name, model, tok, spec)
 
 
-def free_model(lm: "LoadedModel | None", cfg: Config) -> None:
+def free_model(lm: "LoadedModel | None", cfg: Config, purge: bool = False) -> None:
     """The explicit teardown: drop refs, collect, empty the CUDA caching
     allocator, and optionally delete the on-disk snapshot to protect a small
     persistent volume."""
@@ -1457,7 +1488,7 @@ def free_model(lm: "LoadedModel | None", cfg: Config) -> None:
     lm.tokenizer = None
     del lm
     free_cuda()
-    if cfg.PURGE_WEIGHTS_AFTER_MODEL and PATHS["hf_cache"]:
+    if purge and PATHS["hf_cache"]:
         snap = PATHS["hf_cache"] / "hub" / ("models--" + hf_id.replace("/", "--"))
         if snap.exists():
             shutil.rmtree(snap, ignore_errors=True)
@@ -1611,7 +1642,7 @@ def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, 
     if not todo:
         return stats
 
-    bs = auto_batch_size(lm.spec, tier_spec, cfg)
+    bs = auto_batch_size(lm.spec, tier_spec, cfg, n_return)
     temp = cfg.GREEDY_TEMPERATURE if temperature is None else temperature
     tap = ActivationTap(lm, cfg.PERCENTILES) if capture_activations else None
     act_store: dict[int, list[np.ndarray]] = defaultdict(list)
@@ -1643,7 +1674,10 @@ def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, 
 
             for j, it in enumerate(chunk):
                 texts = gens[j]
-                parsed = [parse_response(variant, t) for t in texts]
+                # base models have no chat template and run few-shot, so their
+                # output must be cut at the first self-generated question
+                parsed = [parse_response(variant, t, fewshot=not lm.spec["chat"])
+                          for t in texts]
                 rec = {
                     "qid": it["qid"], "variant": variant, "tier": tier, "model": lm.name,
                     "split": it["split"], "is_pilot": it.get("is_pilot", False),
@@ -1702,11 +1736,33 @@ def save_activations(model: str, tier: str, qids: list[str],
             k = f"p{p}"
             if k in old and k in payload:
                 merged[k] = np.concatenate([old[k], payload[k]], axis=0)
-        payload = merged
+        # De-duplicate by qid, keeping the most recent row. The checkpoint
+        # normally prevents re-extracting a question at all, but it keys on
+        # (qid, variant) — so renaming the variant makes every question look
+        # new and would append a second copy of the whole shard. Duplicated
+        # rows would silently double the probe's training set and break the
+        # independence its AUROC assumes.
+        last = {}
+        for i, q in enumerate(merged["qids"]):
+            last[str(q)] = i
+        keep = np.array(sorted(last.values()), dtype=int)
+        if len(keep) != len(merged["qids"]):
+            LOG.log("activations_deduped", model=model, tier=tier,
+                    before=len(merged["qids"]), after=len(keep))
+        payload = {k: v[keep] for k, v in merged.items()}
     (np.savez_compressed if cfg.COMPRESS_ACTIVATIONS else np.savez)(path, **payload)
     json_write(PATHS["acts"] / f"{model}__{tier}.finiteness.json", fin)
     LOG.log("activations_saved", model=model, tier=tier, n=len(payload["qids"]),
             nonfinite=max((v["nonfinite_frac"] for v in fin.values()), default=0.0))
+
+
+def purge_all_weights() -> None:
+    """PURGE_WEIGHTS='after_run' — drop the whole hub cache once, at the end."""
+    hub = (PATHS["hf_cache"] / "hub") if PATHS["hf_cache"] else None
+    if hub and hub.exists():
+        n = sum(1 for _ in hub.glob("models--*"))
+        shutil.rmtree(hub, ignore_errors=True)
+        LOG.log("weights_purged_all", snapshots=n, path=str(hub))
 # %%
 # ============================================================================
 # CELL 12 — per-model stage drivers (generation side)
@@ -1796,7 +1852,7 @@ def stage_extract(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str])
         if cell_id(lm.name, tier) not in committed:
             continue
         with open_ckpt("extract", lm.name, tier, cfg) as ck:
-            out[tier] = run_generation(lm, cell_items(bank, tier, "all"), "SAMPLE", tier, cfg, ck,
+            out[tier] = run_generation(lm, cell_items(bank, tier, "all"), "EXTRACT", tier, cfg, ck,
                                        temperature=0.0, capture_activations=True)
     return out
 
@@ -2021,10 +2077,23 @@ def probe_labels(model: str, tier: str, qids: list[str], graded: pd.DataFrame,
         mask = np.isfinite(vals)
         med = np.nanmedian(vals) if mask.any() else 0.5
         return (vals >= med).astype(int), mask
-    sub = graded[(graded.model == model) & (graded.tier == tier) &
-                 (graded.variant == "SAMPLE") & (graded.sample_idx == 0)]
+    # Label priority. EXTRACT is the greedy pass whose activations were tapped,
+    # so it is the only variant whose correctness the probe is actually being
+    # asked to predict (PLAN §6·1). FORCED is the next-closest single greedy
+    # answer. SAMPLE is a T>0 draw and is a last resort: using it means the
+    # probe is trained on "was one stochastic sample right", which is label
+    # noise relative to the activation it is paired with.
+    cell = graded[(graded.model == model) & (graded.tier == tier)]
+    sub = cell[cell.variant == "EXTRACT"]
+    source = "EXTRACT"
     if not len(sub):
-        sub = graded[(graded.model == model) & (graded.tier == tier) & (graded.variant == "FORCED")]
+        sub = cell[cell.variant == "FORCED"]
+        source = "FORCED"
+    if not len(sub):
+        sub = cell[(cell.variant == "SAMPLE") & (cell.sample_idx == 0)]
+        source = "SAMPLE(noisy)"
+    if source != "EXTRACT":
+        LOG.log("probe_label_fallback", cell=cell_id(model, tier), using=source)
     lut = dict(zip(sub["qid"], sub["correct"].astype(int)))
     vals = np.array([lut.get(q, -1) for q in qids])
     return np.clip(vals, 0, 1), vals >= 0
@@ -2374,14 +2443,42 @@ def assemble_signals(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
     verbal = verbal_scores(graded, bmap, cfg)
     internal = internal_scores(sweep, bank, graded, entropy, committed, cfg)
 
-    # Canonical verbal format: best ECE on the calibration split (PLAN §4·4).
-    fmt_ece = {}
+    # Canonical verbal format (PLAN §4·4), with the §8·6 pre-flight applied
+    # BEFORE selection rather than after.
+    #
+    # Selecting on ECE alone is unsafe here: format B maps each bucket to that
+    # bucket's empirical accuracy, so a model that only ever uses one bucket
+    # produces a CONSTANT equal to the base rate — which scores ECE ~= 0 while
+    # carrying no information at all. Ranking on ECE therefore rewards exactly
+    # the degeneracy §8·6 exists to exclude. Brier is used instead because it
+    # decomposes into reliability MINUS resolution, so a constant predictor is
+    # penalised by its zero resolution.
+    fmt_stats = {}
     for v in ("A", "B", "C"):
         s = verbal[(verbal.variant == v) & (verbal.split == "calibration")]
         s = s[s.verbal_raw.notna()]
-        fmt_ece[v] = ece(s.verbal_raw.values, s.correct.values, cfg.ECE_BINS) if len(s) >= 20 else np.inf
-    canonical = min(fmt_ece, key=fmt_ece.get)
-    LOG.log("canonical_format", chosen=canonical, ece={k: round(v, 4) for k, v in fmt_ece.items()})
+        nd = int(s.verbal_raw.nunique()) if len(s) else 0
+        ok = len(s) >= 20
+        fmt_stats[v] = {
+            "n": int(len(s)), "n_distinct": nd,
+            "ece": ece(s.verbal_raw.values, s.correct.values, cfg.ECE_BINS) if ok else float("inf"),
+            "brier": brier(s.verbal_raw.values, s.correct.values.astype(float)) if ok else float("inf"),
+            "eligible": bool(ok and nd >= cfg.MIN_DISTINCT_VERBAL),
+        }
+    eligible = [v for v in ("A", "B", "C") if fmt_stats[v]["eligible"]]
+    if eligible:
+        canonical = min(eligible, key=lambda v: fmt_stats[v]["brier"])
+    else:
+        # Nothing clears the pre-flight: keep the most-varied format so the
+        # pipeline still runs, but the degeneracy is recorded loudly.
+        canonical = max(fmt_stats, key=lambda v: fmt_stats[v]["n_distinct"])
+        LOG.log("verbal_all_formats_degenerate", chosen=canonical,
+                n_distinct={k: v["n_distinct"] for k, v in fmt_stats.items()})
+    fmt_ece = {k: v["ece"] for k, v in fmt_stats.items()}
+    LOG.log("canonical_format", chosen=canonical, eligible=eligible,
+            brier={k: round(v["brier"], 4) for k, v in fmt_stats.items()},
+            ece={k: round(v["ece"], 4) for k, v in fmt_stats.items()},
+            n_distinct={k: v["n_distinct"] for k, v in fmt_stats.items()})
 
     v_can = verbal[verbal.variant == canonical][["model", "tier", "qid", "split", "verbal_raw", "correct"]]
     base = v_can.copy()
@@ -2420,14 +2517,34 @@ def assemble_signals(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
             cal_meta[cid][sig] = {"method": method, "n_cal": int(len(idx_cal)), "n_distinct": n_distinct,
                                   "excluded": bool(sig == "verbal" and n_distinct < cfg.MIN_DISTINCT_VERBAL)}
 
+    # Enforce PLAN §8·6: a cell whose verbal signal has fewer than
+    # MIN_DISTINCT_VERBAL distinct values is EXCLUDED from the verbal
+    # comparison — not reported as "well calibrated". Previously this flag was
+    # computed and then ignored, so degenerate cells still reached H1/H2/H3.
+    n_excl = 0
+    for cid, meta_c in cal_meta.items():
+        if not meta_c.get("verbal", {}).get("excluded"):
+            continue
+        model_x, tier_x = cid.split("__")
+        mask = (base["model"] == model_x) & (base["tier"] == tier_x)
+        base.loc[mask, "verbal_cal"] = np.nan
+        base.loc[mask, "verbal_raw"] = np.nan
+        n_excl += int(mask.sum())
+    base["verbal_excluded"] = base["verbal_cal"].isna()
+    LOG.log("verbal_preflight", excluded_cells=sum(
+        1 for m in cal_meta.values() if m.get("verbal", {}).get("excluded")),
+        total_cells=len(cal_meta), excluded_rows=n_excl)
+
     base["family"] = base["tier"].map(lambda t: TIER_SPECS[t]["family"])
     base["params_b"] = base["model"].map(lambda m: MODEL_SPECS[m]["params_b"])
     base["canonical_format"] = canonical
     base.to_parquet(PATHS["derived"] / "signals.parquet", index=False)
     json_write(PATHS["derived"] / "calibration_meta.json",
-               {"canonical_format": canonical, "format_ece": fmt_ece, "cells": cal_meta})
+               {"canonical_format": canonical, "format_ece": fmt_ece,
+                "format_stats": fmt_stats, "cells": cal_meta})
     LOG.log("signals_assembled", rows=len(base), cells=int(base.groupby(["model", "tier"]).ngroups))
-    return base, {"canonical_format": canonical, "format_ece": fmt_ece, "cells": cal_meta,
+    return base, {"canonical_format": canonical, "format_ece": fmt_ece,
+                  "format_stats": fmt_stats, "cells": cal_meta,
                   "bucket_map": bmap, "verbal_long": verbal}
 
 
@@ -2503,6 +2620,9 @@ def test_h1_signal_calibration(signals: pd.DataFrame, cfg: Config) -> dict:
     if len(usable) >= 2:
         best = min(usable, key=lambda s: usable[s]["ece"])
         worst = max(usable, key=lambda s: usable[s]["ece"])
+        out["ece_ranking"] = sorted(usable, key=lambda s: usable[s]["ece"])
+        out["resolution_ranking"] = sorted(
+            usable, key=lambda s: -usable[s].get("resolution", float("-inf")))
         db = test[[f"{best}_cal", "correct"]].dropna()
         dw = test[[f"{worst}_cal", "correct"]].dropna()
         delta = bootstrap_diff_ci(
@@ -2510,9 +2630,27 @@ def test_h1_signal_calibration(signals: pd.DataFrame, cfg: Config) -> dict:
             np.column_stack([db[f"{best}_cal"].values, db["correct"].values.astype(float)]),
             lambda a: ece(a[:, 0], a[:, 1], cfg.ECE_BINS), cfg.N_BOOTSTRAP, cfg.BOOTSTRAP_CI, cfg.SEED)
         out["delta_worst_minus_best"] = {"worst": worst, "best": best, **delta}
-        out["h1_pass"] = bool(delta["excludes_zero"])
-        out["verdict"] = (f"H1 supported — {worst} is worse-calibrated than {best} beyond noise"
-                          if delta["excludes_zero"] else "H1 falsified — CIs overlap, no ordering distinguishable")
+        # H1's STATEMENT is directional: "verbalized confidence runs hot
+        # relative to behavioral and internal". A CI on |best - worst| that
+        # excludes zero only shows the signals DIFFER — if verbal turns out to
+        # be the best-calibrated signal, the ordering contradicts H1 and the
+        # hypothesis is falsified, not supported. Both facts are reported.
+        separable = bool(delta["excludes_zero"])
+        direction_ok = bool(worst == "verbal")
+        out["signals_separable"] = separable
+        out["direction_matches_prediction"] = direction_ok
+        out["h1_pass"] = bool(separable and direction_ok)
+        if not separable:
+            out["verdict"] = "H1 falsified — CIs overlap, no ordering distinguishable"
+        elif direction_ok:
+            out["verdict"] = (f"H1 supported — verbal is worse-calibrated than {best} beyond noise")
+        else:
+            out["verdict"] = (
+                f"H1 falsified on direction — signals differ beyond noise, but the ordering is "
+                f"reversed: verbal is better calibrated than {worst}. "
+                f"ECE rank (best first): {out['ece_ranking']}; "
+                f"resolution rank (highest first): {out['resolution_ranking']}. "
+                f"Note low verbal ECE with low resolution indicates a near-constant predictor.")
     json_write(PATHS["derived"] / "h1_calibration.json", out)
     LOG.log("h1", pass_=out.get("h1_pass"), **{s: round(v.get("ece", np.nan), 4) for s, v in out["pooled"].items()})
     return out
@@ -2946,7 +3084,7 @@ def stage_judge(bank: dict, graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) 
         finally:
             ck.flush()
             if jc.FREE_AFTER:
-                free_model(jm, replace(cfg, PURGE_WEIGHTS_AFTER_MODEL=False))
+                free_model(jm, cfg, purge=False)
 
     jdf = pd.DataFrame(jsonl_read(PATHS["derived"] / "judge.jsonl"))
     if not len(jdf):
@@ -3520,11 +3658,17 @@ def timed(stage: str, model: str, fn: Callable, *args) -> dict:
 
 
 def run_generation_stages_for_model(model: str, bank: dict, committed: set[str],
-                                    cfg: Config, tiers: Sequence[str] | None = None) -> None:
+                                    cfg: Config, tiers: Sequence[str] | None = None,
+                                    purge: bool = False) -> None:
     """Load one model, run every enabled generation stage, then tear it down.
 
     `tiers` restricts this worker to a slice of the ladder — that is how
     MODEL_REPLICAS shards work across replicas of the same weights.
+
+    `purge` deletes the on-disk snapshot afterwards. It must stay False on the
+    pilot pass: the band gate needs every model's pilot before any cell can be
+    committed, so each model is loaded twice, and purging after pass 1 would
+    force a full re-download for pass 2.
     """
     sub = replace(cfg, ONLY_TIERS=tuple(tiers)) if tiers else cfg
     lm = None
@@ -3544,7 +3688,9 @@ def run_generation_stages_for_model(model: str, bank: dict, committed: set[str],
         LOG.log("model_failed", model=model, error=f"{type(exc).__name__}: {exc}")
         raise
     finally:
-        free_model(lm, cfg)                               # <-- clear GPU memory after every model
+        # GPU memory is always cleared here; disk is only reclaimed when the
+        # caller says this was the model's final pass.
+        free_model(lm, cfg, purge=purge)
 
 
 def replica_tier_shards(tiers: list[str], n: int) -> list[list[str]]:
@@ -3585,12 +3731,18 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
             shards = replica_tier_shards(cfg.active_tiers(), cfg.MODEL_REPLICAS) \
                 if cfg.MODEL_REPLICAS > 1 else [None]
             jobs = [(m, sh) for m in wave for sh in shards]
+            # This is each model's FINAL pass, so disk may be reclaimed here.
+            # Never with replicas/shards: the last shard to finish would delete
+            # a snapshot its siblings are still reading.
+            purge = (cfg.PURGE_WEIGHTS == "after_model" and len(jobs) == len(wave))
             if len(jobs) == 1:
-                run_generation_stages_for_model(jobs[0][0], bank, committed, gcfg, jobs[0][1])
+                run_generation_stages_for_model(jobs[0][0], bank, committed, gcfg,
+                                                jobs[0][1], purge=purge)
             else:
                 LOG.log("wave_start", models=wave, replicas=cfg.MODEL_REPLICAS, jobs=len(jobs))
                 with ThreadPoolExecutor(max_workers=len(jobs)) as ex:
-                    futs = [ex.submit(run_generation_stages_for_model, m, bank, committed, gcfg, sh)
+                    futs = [ex.submit(run_generation_stages_for_model, m, bank, committed,
+                                      gcfg, sh, purge)
                             for m, sh in jobs]
                     for f in futs:
                         f.result()
@@ -3642,6 +3794,8 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
         if "report" in cfg.STAGES else {}
 
     free_cuda()
+    if cfg.PURGE_WEIGHTS == "after_run":
+        purge_all_weights()
     LOG.log("pipeline_done", minutes=round((time.time() - t_start) / 60, 1))
     return {"bank": bank, "commitments": commitments, "graded": graded, "entropy": entropy,
             "sweep": sweep, "signals": signals, "h0": h0, "h1": h1, "h2": h2, "h3": h3,

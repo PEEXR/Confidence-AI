@@ -1,0 +1,29 @@
+{
+  "run_name": "full1000",
+  "config_hash": "e9760b8e7a1d",
+  "seed": 20260813,
+  "code_sha": "nogit",
+  "platform": "molab",
+  "devices": {
+    "cuda": true,
+    "n_gpu": 1,
+    "gpus": [
+      {
+        "index": 0,
+        "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "vram_gb": 101.97,
+        "capability": "12.0"
+      }
+    ],
+    "total_vram_gb": 101.97,
+    "max_vram_gb": 101.97,
+    "bf16": true,
+    "torch": "2.11.0+cu130",
+    "python": "3.13.11"
+  },
+  "dtype": "torch.bfloat16",
+  "started_utc": "2026-08-13T02:00:20+00:00",
+  "transformers": "5.14.1",
+  "torch": "2.11.0+cu130",
+  "math_verify": true
+}

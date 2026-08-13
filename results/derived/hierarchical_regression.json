@@ -1,0 +1,28 @@
+{
+  "available": true,
+  "n": 1199,
+  "formula": "correct ~ verbal_cal + behavioral_cal + internal_cal + is_reasoning + log_params + is_reasoning:internal_cal + log_params:internal_cal + layer_pct:is_reasoning",
+  "method": "bayes_mixed_glm",
+  "params": {
+    "Intercept": -4.2080495208170765,
+    "verbal_cal": 1.3450693028477354,
+    "behavioral_cal": 4.83486414945792,
+    "internal_cal": 0.5087904306833324,
+    "is_reasoning": 0.9915850731475148,
+    "log_params": -0.4348270552839561,
+    "is_reasoning:internal_cal": -1.1809601756248636,
+    "log_params:internal_cal": 1.7635517160053156,
+    "layer_pct:is_reasoning": -0.00017656755511040987
+  },
+  "sd": {
+    "Intercept": 0.08651201802883177,
+    "verbal_cal": 0.19765022884212488,
+    "behavioral_cal": 0.16014732805078183,
+    "internal_cal": 0.17795530137990304,
+    "is_reasoning": 0.10234900014060791,
+    "log_params": 0.053374831024590313,
+    "is_reasoning:internal_cal": 0.2264262636659696,
+    "log_params:internal_cal": 0.11315227809572716,
+    "layer_pct:is_reasoning": 0.0015140190629817454
+  }
+}

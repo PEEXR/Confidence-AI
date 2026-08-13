@@ -1,0 +1,303 @@
+{"ts": "2026-08-12T20:25:30+00:00", "event": "session_start", "platform": "molab", "config_hash": "e9760b8e7a1d", "root": "confidence_out/full1000"}
+{"ts": "2026-08-12T20:25:54+00:00", "event": "pipeline_start", "stages": ["data", "pilot", "verbal", "forced", "sample", "extract", "grade", "entropy", "probe", "calibrate", "stats", "figures", "tables", "report"], "models": ["qwen2.5-0.5b-instruct", "qwen2.5-1.5b-instruct", "qwen2.5-3b-instruct", "qwen2.5-7b-instruct", "qwen2.5-7b-base"]}
+{"ts": "2026-08-12T20:25:56+00:00", "event": "tier_built", "tier": "R1", "n": 1000, "pool": 2855, "train": 600, "cal": 200, "test": 200}
+{"ts": "2026-08-12T20:25:57+00:00", "event": "tier_built", "tier": "R2", "n": 1000, "pool": 2857, "train": 600, "cal": 200, "test": 200}
+{"ts": "2026-08-12T20:25:58+00:00", "event": "tier_built", "tier": "R3", "n": 1000, "pool": 4326, "train": 600, "cal": 200, "test": 200}
+{"ts": "2026-08-12T20:25:59+00:00", "event": "tier_built", "tier": "C1", "n": 1000, "pool": 1319, "train": 600, "cal": 200, "test": 200}
+{"ts": "2026-08-12T20:26:00+00:00", "event": "tier_built", "tier": "C2", "n": 1000, "pool": 3243, "train": 600, "cal": 200, "test": 200}
+{"ts": "2026-08-12T20:26:01+00:00", "event": "tier_built", "tier": "C3", "n": 1000, "pool": 6530, "train": 600, "cal": 200, "test": 200}
+{"ts": "2026-08-12T20:26:05+00:00", "event": "model_loaded", "model": "qwen2.5-0.5b-instruct", "secs": 4.6, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 0.99, "reserved_gb": 1.0, "peak_gb": 0.99}}}
+{"ts": "2026-08-12T20:26:28+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "R1", "seconds": 1.2, "generated": 100, "out_tokens": 696, "parse_rate": 0.72}
+{"ts": "2026-08-12T20:26:28+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "R2", "seconds": 0.4, "generated": 100, "out_tokens": 823, "parse_rate": 0.74}
+{"ts": "2026-08-12T20:26:28+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "R3", "seconds": 0.4, "generated": 100, "out_tokens": 777, "parse_rate": 0.99}
+{"ts": "2026-08-12T20:26:28+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "C1", "seconds": 3.2, "generated": 100, "out_tokens": 9125, "parse_rate": 0.89}
+{"ts": "2026-08-12T20:26:28+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "C2", "seconds": 6.5, "generated": 100, "out_tokens": 10434, "parse_rate": 0.9}
+{"ts": "2026-08-12T20:26:28+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "C3", "seconds": 10.5, "generated": 100, "out_tokens": 19433, "parse_rate": 0.71}
+{"ts": "2026-08-12T20:26:28+00:00", "event": "stage_done", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "secs": 22.3}
+{"ts": "2026-08-12T20:26:28+00:00", "event": "model_freed", "model": "qwen2.5-0.5b-instruct", "vram": {"gpu0": {"alloc_gb": 0.01, "reserved_gb": 0.99, "peak_gb": 0.01}}}
+{"ts": "2026-08-12T20:26:37+00:00", "event": "model_loaded", "model": "qwen2.5-1.5b-instruct", "secs": 8.6, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 3.1, "reserved_gb": 3.16, "peak_gb": 3.1}}}
+{"ts": "2026-08-12T20:27:17+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "R1", "seconds": 0.3, "generated": 100, "out_tokens": 390, "parse_rate": 0.86}
+{"ts": "2026-08-12T20:27:17+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "R2", "seconds": 0.3, "generated": 100, "out_tokens": 415, "parse_rate": 0.91}
+{"ts": "2026-08-12T20:27:17+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "R3", "seconds": 0.4, "generated": 100, "out_tokens": 482, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:27:17+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "C1", "seconds": 5.3, "generated": 100, "out_tokens": 11490, "parse_rate": 0.93}
+{"ts": "2026-08-12T20:27:17+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "seconds": 12.7, "generated": 100, "out_tokens": 12286, "parse_rate": 0.85}
+{"ts": "2026-08-12T20:27:17+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "C3", "seconds": 20.9, "generated": 100, "out_tokens": 22234, "parse_rate": 0.72}
+{"ts": "2026-08-12T20:27:17+00:00", "event": "stage_done", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "secs": 39.9}
+{"ts": "2026-08-12T20:27:17+00:00", "event": "model_freed", "model": "qwen2.5-1.5b-instruct", "vram": {"gpu0": {"alloc_gb": 0.01, "reserved_gb": 0.99, "peak_gb": 0.01}}}
+{"ts": "2026-08-12T20:27:31+00:00", "event": "model_loaded", "model": "qwen2.5-3b-instruct", "secs": 13.7, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 6.18, "reserved_gb": 6.26, "peak_gb": 6.18}}}
+{"ts": "2026-08-12T20:28:20+00:00", "event": "model_freed", "model": "qwen2.5-3b-instruct", "vram": {"gpu0": {"alloc_gb": 4.95, "reserved_gb": 12.02, "peak_gb": 4.95}}}
+{"ts": "2026-08-12T20:31:14+00:00", "event": "pipeline_start", "stages": ["data", "pilot", "verbal", "forced", "sample", "extract", "grade", "entropy", "probe", "calibrate", "stats", "figures", "tables", "report"], "models": ["qwen2.5-0.5b-instruct", "qwen2.5-1.5b-instruct", "qwen2.5-3b-instruct", "qwen2.5-7b-instruct", "qwen2.5-7b-base"]}
+{"ts": "2026-08-12T20:31:14+00:00", "event": "bank_reused", "tiers": 6}
+{"ts": "2026-08-12T20:31:16+00:00", "event": "model_loaded", "model": "qwen2.5-0.5b-instruct", "secs": 1.7, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 5.94, "reserved_gb": 12.03, "peak_gb": 5.94}}}
+{"ts": "2026-08-12T20:31:16+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "R1", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:16+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "R2", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:16+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "R3", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:16+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "C1", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:16+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "C2", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:16+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "tier": "C3", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:16+00:00", "event": "stage_done", "stage": "pilot", "model": "qwen2.5-0.5b-instruct", "secs": 0.0}
+{"ts": "2026-08-12T20:31:16+00:00", "event": "model_freed", "model": "qwen2.5-0.5b-instruct", "vram": {"gpu0": {"alloc_gb": 4.95, "reserved_gb": 12.02, "peak_gb": 4.95}}}
+{"ts": "2026-08-12T20:31:18+00:00", "event": "model_loaded", "model": "qwen2.5-1.5b-instruct", "secs": 2.4, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 8.04, "reserved_gb": 12.07, "peak_gb": 8.04}}}
+{"ts": "2026-08-12T20:31:18+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "R1", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:18+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "R2", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:18+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "R3", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:18+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "C1", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:18+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:18+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "tier": "C3", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:18+00:00", "event": "stage_done", "stage": "pilot", "model": "qwen2.5-1.5b-instruct", "secs": 0.0}
+{"ts": "2026-08-12T20:31:19+00:00", "event": "model_freed", "model": "qwen2.5-1.5b-instruct", "vram": {"gpu0": {"alloc_gb": 4.95, "reserved_gb": 12.02, "peak_gb": 4.95}}}
+{"ts": "2026-08-12T20:31:22+00:00", "event": "model_loaded", "model": "qwen2.5-3b-instruct", "secs": 3.3, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 11.12, "reserved_gb": 12.09, "peak_gb": 11.12}}}
+{"ts": "2026-08-12T20:31:55+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-3b-instruct", "tier": "R1", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:55+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-3b-instruct", "tier": "R2", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:55+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-3b-instruct", "tier": "R3", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:55+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-3b-instruct", "tier": "C1", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:55+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-3b-instruct", "tier": "C2", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:31:55+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-3b-instruct", "tier": "C3", "seconds": 33.4, "generated": 100, "out_tokens": 7444, "parse_rate": 0.99}
+{"ts": "2026-08-12T20:31:55+00:00", "event": "stage_done", "stage": "pilot", "model": "qwen2.5-3b-instruct", "secs": 33.4}
+{"ts": "2026-08-12T20:31:56+00:00", "event": "model_freed", "model": "qwen2.5-3b-instruct", "vram": {"gpu0": {"alloc_gb": 4.96, "reserved_gb": 12.02, "peak_gb": 4.96}}}
+{"ts": "2026-08-12T20:32:28+00:00", "event": "model_loaded", "model": "qwen2.5-7b-instruct", "secs": 32.5, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 20.19, "reserved_gb": 20.26, "peak_gb": 20.19}}}
+{"ts": "2026-08-12T20:33:42+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-instruct", "tier": "R1", "seconds": 0.7, "generated": 100, "out_tokens": 408, "parse_rate": 0.94}
+{"ts": "2026-08-12T20:33:42+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-instruct", "tier": "R2", "seconds": 0.9, "generated": 100, "out_tokens": 454, "parse_rate": 0.98}
+{"ts": "2026-08-12T20:33:42+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-instruct", "tier": "R3", "seconds": 1.2, "generated": 100, "out_tokens": 461, "parse_rate": 0.98}
+{"ts": "2026-08-12T20:33:42+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-instruct", "tier": "C1", "seconds": 9.3, "generated": 100, "out_tokens": 4071, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:33:42+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-instruct", "tier": "C2", "seconds": 18.6, "generated": 100, "out_tokens": 4017, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:33:42+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-instruct", "tier": "C3", "seconds": 43.4, "generated": 100, "out_tokens": 6234, "parse_rate": 0.99}
+{"ts": "2026-08-12T20:33:42+00:00", "event": "stage_done", "stage": "pilot", "model": "qwen2.5-7b-instruct", "secs": 74.0}
+{"ts": "2026-08-12T20:33:42+00:00", "event": "model_freed", "model": "qwen2.5-7b-instruct", "vram": {"gpu0": {"alloc_gb": 4.96, "reserved_gb": 12.02, "peak_gb": 4.96}}}
+{"ts": "2026-08-12T20:34:17+00:00", "event": "model_loaded", "model": "qwen2.5-7b-base", "secs": 34.2, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 20.19, "reserved_gb": 20.26, "peak_gb": 20.19}}}
+{"ts": "2026-08-12T20:36:06+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-base", "tier": "R1", "seconds": 1.6, "generated": 100, "out_tokens": 3167, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:36:06+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-base", "tier": "R2", "seconds": 1.6, "generated": 100, "out_tokens": 3150, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:36:06+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-base", "tier": "R3", "seconds": 1.8, "generated": 100, "out_tokens": 2903, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:36:06+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-base", "tier": "C1", "seconds": 16.8, "generated": 100, "out_tokens": 21715, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:36:06+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-base", "tier": "C2", "seconds": 33.2, "generated": 100, "out_tokens": 20875, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:36:06+00:00", "event": "stage_timing", "stage": "pilot", "model": "qwen2.5-7b-base", "tier": "C3", "seconds": 54.0, "generated": 100, "out_tokens": 29204, "parse_rate": 0.96}
+{"ts": "2026-08-12T20:36:06+00:00", "event": "stage_done", "stage": "pilot", "model": "qwen2.5-7b-base", "secs": 108.9}
+{"ts": "2026-08-12T20:36:06+00:00", "event": "model_freed", "model": "qwen2.5-7b-base", "vram": {"gpu0": {"alloc_gb": 4.96, "reserved_gb": 12.02, "peak_gb": 4.96}}}
+{"ts": "2026-08-12T20:36:12+00:00", "event": "nli_loaded", "model": "microsoft/deberta-large-mnli", "device": "cuda"}
+{"ts": "2026-08-12T20:36:22+00:00", "event": "band_gate", "cells": 30, "committed": 10, "ragged": 20}
+{"ts": "2026-08-12T20:36:23+00:00", "event": "model_loaded", "model": "qwen2.5-0.5b-instruct", "secs": 1.1, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 7.58, "reserved_gb": 12.05, "peak_gb": 7.58}}}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "R1", "seconds": 0.4, "generated": 100, "out_tokens": 1046, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "R1", "seconds": 0.4, "generated": 100, "out_tokens": 1233, "parse_rate": 0.97}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "R1", "seconds": 0.3, "generated": 100, "out_tokens": 138, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "R2", "seconds": 0.4, "generated": 100, "out_tokens": 1095, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "R2", "seconds": 0.4, "generated": 100, "out_tokens": 1248, "parse_rate": 0.97}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "R2", "seconds": 0.1, "generated": 100, "out_tokens": 100, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "R3", "seconds": 0.4, "generated": 100, "out_tokens": 1305, "parse_rate": 0.96}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "R3", "seconds": 0.5, "generated": 100, "out_tokens": 1394, "parse_rate": 0.9}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "R3", "seconds": 0.3, "generated": 100, "out_tokens": 150, "parse_rate": 0.01}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "C1", "seconds": 3.3, "generated": 100, "out_tokens": 7599, "parse_rate": 0.78}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "C1", "seconds": 3.2, "generated": 100, "out_tokens": 8265, "parse_rate": 0.77}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "C1", "seconds": 3.2, "generated": 100, "out_tokens": 15099, "parse_rate": 0.82}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "C2", "seconds": 6.4, "generated": 100, "out_tokens": 8717, "parse_rate": 0.88}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "C2", "seconds": 6.5, "generated": 100, "out_tokens": 7335, "parse_rate": 0.86}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "C2", "seconds": 6.5, "generated": 100, "out_tokens": 15604, "parse_rate": 0.64}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "C3", "seconds": 10.6, "generated": 100, "out_tokens": 14803, "parse_rate": 0.68}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "C3", "seconds": 10.8, "generated": 100, "out_tokens": 12668, "parse_rate": 0.66}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "tier": "C3", "seconds": 10.7, "generated": 100, "out_tokens": 26387, "parse_rate": 0.4}
+{"ts": "2026-08-12T20:37:28+00:00", "event": "stage_done", "stage": "verbal", "model": "qwen2.5-0.5b-instruct", "secs": 64.6}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-0.5b-instruct", "tier": "R1", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-0.5b-instruct", "tier": "R2", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-0.5b-instruct", "tier": "R3", "seconds": 0.1, "generated": 1, "out_tokens": 7, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-0.5b-instruct", "tier": "C1", "seconds": 2.9, "generated": 62, "out_tokens": 4731, "parse_rate": 0.871}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-0.5b-instruct", "tier": "C2", "seconds": 3.8, "generated": 53, "out_tokens": 4417, "parse_rate": 0.9623}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-0.5b-instruct", "tier": "C3", "seconds": 5.4, "generated": 37, "out_tokens": 5643, "parse_rate": 0.8378}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "stage_done", "stage": "forced", "model": "qwen2.5-0.5b-instruct", "secs": 12.2}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "stage_done", "stage": "sample", "model": "qwen2.5-0.5b-instruct", "secs": 0.0}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "stage_done", "stage": "extract", "model": "qwen2.5-0.5b-instruct", "secs": 0.0}
+{"ts": "2026-08-12T20:37:40+00:00", "event": "model_freed", "model": "qwen2.5-0.5b-instruct", "vram": {"gpu0": {"alloc_gb": 6.59, "reserved_gb": 12.02, "peak_gb": 6.59}}}
+{"ts": "2026-08-12T20:37:43+00:00", "event": "model_loaded", "model": "qwen2.5-1.5b-instruct", "secs": 2.0, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 9.67, "reserved_gb": 12.08, "peak_gb": 9.67}}}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "R1", "seconds": 3.8, "generated": 1000, "out_tokens": 8723, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "R1", "seconds": 4.4, "generated": 1000, "out_tokens": 19381, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "R1", "seconds": 4.0, "generated": 1000, "out_tokens": 6526, "parse_rate": 0.99}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "R2", "seconds": 0.6, "generated": 100, "out_tokens": 895, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "R2", "seconds": 0.6, "generated": 100, "out_tokens": 2103, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "R2", "seconds": 0.3, "generated": 100, "out_tokens": 616, "parse_rate": 0.98}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "R3", "seconds": 0.7, "generated": 100, "out_tokens": 873, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "R3", "seconds": 0.7, "generated": 100, "out_tokens": 2281, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "R3", "seconds": 0.6, "generated": 100, "out_tokens": 915, "parse_rate": 0.98}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "C1", "seconds": 45.6, "generated": 1000, "out_tokens": 109019, "parse_rate": 0.945}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "C1", "seconds": 47.3, "generated": 1000, "out_tokens": 107483, "parse_rate": 0.957}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "C1", "seconds": 47.4, "generated": 1000, "out_tokens": 126018, "parse_rate": 0.897}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "seconds": 112.1, "generated": 1000, "out_tokens": 132921, "parse_rate": 0.84}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "seconds": 114.3, "generated": 1000, "out_tokens": 130850, "parse_rate": 0.849}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "seconds": 114.4, "generated": 1000, "out_tokens": 149123, "parse_rate": 0.793}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "C3", "seconds": 21.0, "generated": 100, "out_tokens": 22167, "parse_rate": 0.69}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "C3", "seconds": 21.3, "generated": 100, "out_tokens": 22339, "parse_rate": 0.7}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "tier": "C3", "seconds": 21.3, "generated": 100, "out_tokens": 24877, "parse_rate": 0.62}
+{"ts": "2026-08-12T20:47:03+00:00", "event": "stage_done", "stage": "verbal", "model": "qwen2.5-1.5b-instruct", "secs": 560.5}
+{"ts": "2026-08-12T20:48:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-1.5b-instruct", "tier": "R1", "seconds": 2.2, "generated": 915, "out_tokens": 4072, "parse_rate": 0.929}
+{"ts": "2026-08-12T20:48:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-1.5b-instruct", "tier": "R2", "seconds": 0.3, "generated": 96, "out_tokens": 401, "parse_rate": 0.9167}
+{"ts": "2026-08-12T20:48:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-1.5b-instruct", "tier": "R3", "seconds": 0.4, "generated": 92, "out_tokens": 433, "parse_rate": 1.0}
+{"ts": "2026-08-12T20:48:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-1.5b-instruct", "tier": "C1", "seconds": 18.9, "generated": 395, "out_tokens": 44776, "parse_rate": 0.9722}
+{"ts": "2026-08-12T20:48:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "seconds": 46.4, "generated": 370, "out_tokens": 48390, "parse_rate": 0.9162}
+{"ts": "2026-08-12T20:48:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-1.5b-instruct", "tier": "C3", "seconds": 10.3, "generated": 40, "out_tokens": 8459, "parse_rate": 0.875}
+{"ts": "2026-08-12T20:48:22+00:00", "event": "stage_done", "stage": "forced", "model": "qwen2.5-1.5b-instruct", "secs": 78.6}
+{"ts": "2026-08-12T20:56:27+00:00", "event": "oom_backoff", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "variant": "SAMPLE", "new_batch": 118}
+{"ts": "2026-08-12T21:00:11+00:00", "event": "oom_backoff", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "variant": "SAMPLE", "new_batch": 59}
+{"ts": "2026-08-12T21:11:40+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-1.5b-instruct", "tier": "R1", "seconds": 34.2, "generated": 1000, "out_tokens": 49273, "parse_rate": 0.9586}
+{"ts": "2026-08-12T21:11:40+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-1.5b-instruct", "tier": "C1", "seconds": 450.2, "generated": 1000, "out_tokens": 1107097, "parse_rate": 0.9387}
+{"ts": "2026-08-12T21:11:40+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "seconds": 914.1, "generated": 1000, "out_tokens": 1362006, "parse_rate": 0.8389}
+{"ts": "2026-08-12T21:11:40+00:00", "event": "stage_done", "stage": "sample", "model": "qwen2.5-1.5b-instruct", "secs": 1398.5}
+{"ts": "2026-08-12T21:11:46+00:00", "event": "activations_saved", "model": "qwen2.5-1.5b-instruct", "tier": "R1", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T21:12:34+00:00", "event": "activations_saved", "model": "qwen2.5-1.5b-instruct", "tier": "C1", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T21:14:29+00:00", "event": "activations_saved", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T21:14:29+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-1.5b-instruct", "tier": "R1", "seconds": 5.4, "generated": 1000, "out_tokens": 4519, "parse_rate": 0.978}
+{"ts": "2026-08-12T21:14:29+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-1.5b-instruct", "tier": "C1", "seconds": 48.3, "generated": 1000, "out_tokens": 109423, "parse_rate": 0.959}
+{"ts": "2026-08-12T21:14:29+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-1.5b-instruct", "tier": "C2", "seconds": 114.7, "generated": 1000, "out_tokens": 126295, "parse_rate": 0.854}
+{"ts": "2026-08-12T21:14:29+00:00", "event": "stage_done", "stage": "extract", "model": "qwen2.5-1.5b-instruct", "secs": 168.4}
+{"ts": "2026-08-12T21:14:29+00:00", "event": "model_freed", "model": "qwen2.5-1.5b-instruct", "vram": {"gpu0": {"alloc_gb": 6.59, "reserved_gb": 12.02, "peak_gb": 6.59}}}
+{"ts": "2026-08-12T21:14:32+00:00", "event": "model_loaded", "model": "qwen2.5-3b-instruct", "secs": 3.4, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 12.77, "reserved_gb": 12.85, "peak_gb": 12.77}}}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "R1", "seconds": 4.9, "generated": 1000, "out_tokens": 8271, "parse_rate": 0.998}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "R1", "seconds": 5.9, "generated": 1000, "out_tokens": 9816, "parse_rate": 0.999}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "R1", "seconds": 5.7, "generated": 1000, "out_tokens": 8320, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "R2", "seconds": 0.6, "generated": 100, "out_tokens": 814, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "R2", "seconds": 0.7, "generated": 100, "out_tokens": 1002, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "R2", "seconds": 0.6, "generated": 100, "out_tokens": 763, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "R3", "seconds": 0.9, "generated": 100, "out_tokens": 852, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "R3", "seconds": 0.9, "generated": 100, "out_tokens": 992, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "R3", "seconds": 0.9, "generated": 100, "out_tokens": 876, "parse_rate": 0.96}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "C1", "seconds": 57.9, "generated": 1000, "out_tokens": 65699, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "C1", "seconds": 58.2, "generated": 1000, "out_tokens": 66620, "parse_rate": 0.999}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "C1", "seconds": 43.7, "generated": 1000, "out_tokens": 53524, "parse_rate": 0.99}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "C2", "seconds": 138.1, "generated": 1000, "out_tokens": 58881, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "C2", "seconds": 160.0, "generated": 1000, "out_tokens": 61565, "parse_rate": 0.997}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "C2", "seconds": 92.8, "generated": 1000, "out_tokens": 47593, "parse_rate": 0.989}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "C3", "seconds": 33.5, "generated": 100, "out_tokens": 8073, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "C3", "seconds": 21.2, "generated": 100, "out_tokens": 8070, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-3b-instruct", "tier": "C3", "seconds": 34.0, "generated": 100, "out_tokens": 6695, "parse_rate": 0.91}
+{"ts": "2026-08-12T21:25:33+00:00", "event": "stage_done", "stage": "verbal", "model": "qwen2.5-3b-instruct", "secs": 660.4}
+{"ts": "2026-08-12T21:25:45+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-3b-instruct", "tier": "R1", "seconds": 0.4, "generated": 54, "out_tokens": 235, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:45+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-3b-instruct", "tier": "R2", "seconds": 0.2, "generated": 11, "out_tokens": 44, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:45+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-3b-instruct", "tier": "R3", "seconds": 0.3, "generated": 4, "out_tokens": 16, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:45+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-3b-instruct", "tier": "C1", "seconds": 3.6, "generated": 16, "out_tokens": 1266, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:45+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-3b-instruct", "tier": "C2", "seconds": 4.8, "generated": 28, "out_tokens": 1989, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:45+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-3b-instruct", "tier": "C3", "seconds": 2.4, "generated": 7, "out_tokens": 503, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:25:45+00:00", "event": "stage_done", "stage": "forced", "model": "qwen2.5-3b-instruct", "secs": 11.6}
+{"ts": "2026-08-12T21:36:17+00:00", "event": "oom_backoff", "model": "qwen2.5-3b-instruct", "tier": "C2", "variant": "SAMPLE", "new_batch": 66}
+{"ts": "2026-08-12T21:40:19+00:00", "event": "oom_backoff", "model": "qwen2.5-3b-instruct", "tier": "C2", "variant": "SAMPLE", "new_batch": 33}
+{"ts": "2026-08-12T21:54:51+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-3b-instruct", "tier": "R1", "seconds": 44.7, "generated": 1000, "out_tokens": 47999, "parse_rate": 0.9984}
+{"ts": "2026-08-12T21:54:51+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-3b-instruct", "tier": "C1", "seconds": 586.9, "generated": 1000, "out_tokens": 598799, "parse_rate": 0.998}
+{"ts": "2026-08-12T21:54:51+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-3b-instruct", "tier": "C2", "seconds": 1114.7, "generated": 1000, "out_tokens": 525397, "parse_rate": 0.9993}
+{"ts": "2026-08-12T21:54:51+00:00", "event": "stage_done", "stage": "sample", "model": "qwen2.5-3b-instruct", "secs": 1746.2}
+{"ts": "2026-08-12T21:54:59+00:00", "event": "activations_saved", "model": "qwen2.5-3b-instruct", "tier": "R1", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T21:56:00+00:00", "event": "activations_saved", "model": "qwen2.5-3b-instruct", "tier": "C1", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T21:57:53+00:00", "event": "activations_saved", "model": "qwen2.5-3b-instruct", "tier": "C2", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T21:57:53+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-3b-instruct", "tier": "R1", "seconds": 7.9, "generated": 1000, "out_tokens": 4443, "parse_rate": 0.998}
+{"ts": "2026-08-12T21:57:53+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-3b-instruct", "tier": "C1", "seconds": 61.7, "generated": 1000, "out_tokens": 59872, "parse_rate": 0.998}
+{"ts": "2026-08-12T21:57:53+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-3b-instruct", "tier": "C2", "seconds": 113.0, "generated": 1000, "out_tokens": 50913, "parse_rate": 1.0}
+{"ts": "2026-08-12T21:57:53+00:00", "event": "stage_done", "stage": "extract", "model": "qwen2.5-3b-instruct", "secs": 182.6}
+{"ts": "2026-08-12T21:57:54+00:00", "event": "model_freed", "model": "qwen2.5-3b-instruct", "vram": {"gpu0": {"alloc_gb": 6.59, "reserved_gb": 12.02, "peak_gb": 6.59}}}
+{"ts": "2026-08-12T21:58:02+00:00", "event": "model_loaded", "model": "qwen2.5-7b-instruct", "secs": 7.8, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 21.82, "reserved_gb": 21.87, "peak_gb": 21.82}}}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "R1", "seconds": 9.8, "generated": 1000, "out_tokens": 8241, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "R1", "seconds": 10.4, "generated": 1000, "out_tokens": 9848, "parse_rate": 0.999}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "R1", "seconds": 10.0, "generated": 1000, "out_tokens": 8064, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "R2", "seconds": 1.2, "generated": 100, "out_tokens": 831, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "R2", "seconds": 1.1, "generated": 100, "out_tokens": 1022, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "R2", "seconds": 1.0, "generated": 100, "out_tokens": 703, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "R3", "seconds": 1.5, "generated": 100, "out_tokens": 854, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "R3", "seconds": 1.4, "generated": 100, "out_tokens": 1029, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "R3", "seconds": 1.3, "generated": 100, "out_tokens": 741, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "C1", "seconds": 69.8, "generated": 1000, "out_tokens": 38242, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "C1", "seconds": 71.0, "generated": 1000, "out_tokens": 41294, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "C1", "seconds": 104.2, "generated": 1000, "out_tokens": 38965, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "C2", "seconds": 172.7, "generated": 1000, "out_tokens": 36272, "parse_rate": 0.997}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "C2", "seconds": 163.5, "generated": 1000, "out_tokens": 38405, "parse_rate": 0.999}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "C2", "seconds": 191.4, "generated": 1000, "out_tokens": 44071, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "C3", "seconds": 339.5, "generated": 1000, "out_tokens": 54346, "parse_rate": 0.995}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "C3", "seconds": 291.8, "generated": 1000, "out_tokens": 53569, "parse_rate": 0.997}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-instruct", "tier": "C3", "seconds": 381.2, "generated": 1000, "out_tokens": 64199, "parse_rate": 0.998}
+{"ts": "2026-08-12T22:28:25+00:00", "event": "stage_done", "stage": "verbal", "model": "qwen2.5-7b-instruct", "secs": 1823.0}
+{"ts": "2026-08-12T22:28:43+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-instruct", "tier": "R1", "seconds": 1.5, "generated": 239, "out_tokens": 961, "parse_rate": 0.9791}
+{"ts": "2026-08-12T22:28:43+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-instruct", "tier": "R2", "seconds": 0.6, "generated": 59, "out_tokens": 275, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:43+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-instruct", "tier": "R3", "seconds": 0.7, "generated": 48, "out_tokens": 235, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:43+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-instruct", "tier": "C1", "seconds": 1.6, "generated": 3, "out_tokens": 105, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:43+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-instruct", "tier": "C2", "seconds": 3.3, "generated": 10, "out_tokens": 499, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:43+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-instruct", "tier": "C3", "seconds": 10.9, "generated": 17, "out_tokens": 1461, "parse_rate": 1.0}
+{"ts": "2026-08-12T22:28:43+00:00", "event": "stage_done", "stage": "forced", "model": "qwen2.5-7b-instruct", "secs": 18.8}
+{"ts": "2026-08-12T22:39:38+00:00", "event": "oom_backoff", "model": "qwen2.5-7b-instruct", "tier": "C2", "variant": "SAMPLE", "new_batch": 43}
+{"ts": "2026-08-12T22:45:45+00:00", "event": "oom_backoff", "model": "qwen2.5-7b-instruct", "tier": "C2", "variant": "SAMPLE", "new_batch": 21}
+{"ts": "2026-08-12T23:01:01+00:00", "event": "oom_backoff", "model": "qwen2.5-7b-instruct", "tier": "C3", "variant": "SAMPLE", "new_batch": 38}
+{"ts": "2026-08-12T23:06:14+00:00", "event": "oom_backoff", "model": "qwen2.5-7b-instruct", "tier": "C3", "variant": "SAMPLE", "new_batch": 19}
+{"ts": "2026-08-12T23:39:56+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-7b-instruct", "tier": "R1", "seconds": 75.0, "generated": 1000, "out_tokens": 47797, "parse_rate": 0.9943}
+{"ts": "2026-08-12T23:39:56+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-7b-instruct", "tier": "C1", "seconds": 579.0, "generated": 1000, "out_tokens": 331813, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:39:56+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-7b-instruct", "tier": "C2", "seconds": 1282.8, "generated": 1000, "out_tokens": 335333, "parse_rate": 0.9981}
+{"ts": "2026-08-12T23:39:56+00:00", "event": "stage_timing", "stage": "sample", "model": "qwen2.5-7b-instruct", "tier": "C3", "seconds": 2336.5, "generated": 1000, "out_tokens": 516481, "parse_rate": 0.9976}
+{"ts": "2026-08-12T23:39:56+00:00", "event": "stage_done", "stage": "sample", "model": "qwen2.5-7b-instruct", "secs": 4273.2}
+{"ts": "2026-08-12T23:40:11+00:00", "event": "activations_saved", "model": "qwen2.5-7b-instruct", "tier": "R1", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T23:41:19+00:00", "event": "activations_saved", "model": "qwen2.5-7b-instruct", "tier": "C1", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T23:44:13+00:00", "event": "activations_saved", "model": "qwen2.5-7b-instruct", "tier": "C2", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T23:49:17+00:00", "event": "activations_saved", "model": "qwen2.5-7b-instruct", "tier": "C3", "n": 1000, "nonfinite": 0.0}
+{"ts": "2026-08-12T23:49:17+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-7b-instruct", "tier": "R1", "seconds": 14.6, "generated": 1000, "out_tokens": 4424, "parse_rate": 0.996}
+{"ts": "2026-08-12T23:49:17+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-7b-instruct", "tier": "C1", "seconds": 68.3, "generated": 1000, "out_tokens": 32718, "parse_rate": 0.999}
+{"ts": "2026-08-12T23:49:17+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-7b-instruct", "tier": "C2", "seconds": 173.3, "generated": 1000, "out_tokens": 32712, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:49:17+00:00", "event": "stage_timing", "stage": "extract", "model": "qwen2.5-7b-instruct", "tier": "C3", "seconds": 304.0, "generated": 1000, "out_tokens": 50247, "parse_rate": 0.996}
+{"ts": "2026-08-12T23:49:17+00:00", "event": "stage_done", "stage": "extract", "model": "qwen2.5-7b-instruct", "secs": 560.2}
+{"ts": "2026-08-12T23:49:17+00:00", "event": "model_freed", "model": "qwen2.5-7b-instruct", "vram": {"gpu0": {"alloc_gb": 6.59, "reserved_gb": 12.02, "peak_gb": 6.59}}}
+{"ts": "2026-08-12T23:49:24+00:00", "event": "model_loaded", "model": "qwen2.5-7b-base", "secs": 6.9, "dtype": "torch.bfloat16", "vram": {"gpu0": {"alloc_gb": 21.82, "reserved_gb": 21.87, "peak_gb": 21.82}}}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "R1", "seconds": 1.8, "generated": 100, "out_tokens": 2782, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "R1", "seconds": 2.0, "generated": 100, "out_tokens": 1397, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "R1", "seconds": 1.9, "generated": 100, "out_tokens": 2964, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "R2", "seconds": 1.8, "generated": 100, "out_tokens": 2796, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "R2", "seconds": 2.0, "generated": 100, "out_tokens": 1036, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "R2", "seconds": 1.9, "generated": 100, "out_tokens": 2973, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "R3", "seconds": 2.0, "generated": 100, "out_tokens": 2495, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "R3", "seconds": 2.2, "generated": 100, "out_tokens": 991, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "R3", "seconds": 2.1, "generated": 100, "out_tokens": 2822, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "C1", "seconds": 17.7, "generated": 100, "out_tokens": 19991, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "C1", "seconds": 18.2, "generated": 100, "out_tokens": 22145, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "C1", "seconds": 17.9, "generated": 100, "out_tokens": 22327, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "C2", "seconds": 34.2, "generated": 100, "out_tokens": 20663, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "C2", "seconds": 34.9, "generated": 100, "out_tokens": 21960, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "C2", "seconds": 34.5, "generated": 100, "out_tokens": 21886, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "C3", "seconds": 55.5, "generated": 100, "out_tokens": 28675, "parse_rate": 0.96}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "C3", "seconds": 56.4, "generated": 100, "out_tokens": 29537, "parse_rate": 0.97}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_timing", "stage": "verbal", "model": "qwen2.5-7b-base", "tier": "C3", "seconds": 55.9, "generated": 100, "out_tokens": 31283, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:07+00:00", "event": "stage_done", "stage": "verbal", "model": "qwen2.5-7b-base", "secs": 342.7}
+{"ts": "2026-08-12T23:55:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-base", "tier": "R1", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T23:55:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-base", "tier": "R2", "seconds": 0.5, "generated": 1, "out_tokens": 31, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-base", "tier": "R3", "seconds": 0.5, "generated": 1, "out_tokens": 23, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-base", "tier": "C1", "seconds": 0.0, "generated": 0, "out_tokens": 0, "parse_rate": 0.0}
+{"ts": "2026-08-12T23:55:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-base", "tier": "C2", "seconds": 6.2, "generated": 5, "out_tokens": 1169, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:22+00:00", "event": "stage_timing", "stage": "forced", "model": "qwen2.5-7b-base", "tier": "C3", "seconds": 8.5, "generated": 3, "out_tokens": 874, "parse_rate": 1.0}
+{"ts": "2026-08-12T23:55:22+00:00", "event": "stage_done", "stage": "forced", "model": "qwen2.5-7b-base", "secs": 15.6}
+{"ts": "2026-08-12T23:55:22+00:00", "event": "stage_done", "stage": "sample", "model": "qwen2.5-7b-base", "secs": 0.0}
+{"ts": "2026-08-12T23:55:22+00:00", "event": "stage_done", "stage": "extract", "model": "qwen2.5-7b-base", "secs": 0.0}
+{"ts": "2026-08-12T23:55:23+00:00", "event": "model_freed", "model": "qwen2.5-7b-base", "vram": {"gpu0": {"alloc_gb": 6.59, "reserved_gb": 12.02, "peak_gb": 6.59}}}
+{"ts": "2026-08-12T23:56:16+00:00", "event": "graded", "rows": 150848, "graders": {"alias_exact": 43939, "no_answer": 7256, "nli": 1731, "numeric": 41828, "string_fallback": 214, "symbolic": 55880}, "unresolved": 0}
+{"ts": "2026-08-12T23:56:16+00:00", "event": "entropy_sanity", "all_same_confidence": 1.0, "even_split_confidence": 0.0, "n_samples": 10, "passes": true}
+{"ts": "2026-08-12T23:57:06+00:00", "event": "entropy", "rows": 10000, "mean_conf": 0.5445}
+{"ts": "2026-08-13T01:43:50+00:00", "event": "probe_sweep", "rows": 50, "cells": 10}
+{"ts": "2026-08-13T01:43:50+00:00", "event": "gate3", "cells": 10, "passed": 10}
+{"ts": "2026-08-13T01:45:03+00:00", "event": "canonical_format", "chosen": "B", "ece": {"A": 0.5408, "B": 0.0, "C": 0.4219}}
+{"ts": "2026-08-13T01:45:03+00:00", "event": "signals_assembled", "rows": 12000, "cells": 30}
+{"ts": "2026-08-13T01:45:07+00:00", "event": "gate2", "pass_": false, "A-B": 0.107, "A-C": -0.04, "B-C": 0.168}
+{"ts": "2026-08-13T01:45:10+00:00", "event": "h1", "pass_": false, "verbal": 0.025, "behavioral": 0.036, "internal": 0.0482}
+{"ts": "2026-08-13T01:45:14+00:00", "event": "h2", "pass_": true, "agree_low": 785, "suppressed": 364, "agree_high": 458, "hopeful": 363}
+{"ts": "2026-08-13T01:45:14+00:00", "event": "abstention", "justified_hedge": 1772, "missed_knowledge": 795}
+{"ts": "2026-08-13T01:45:14+00:00", "event": "h4", "pass_": false, "ret": 25.0, "rea": 21.428571428571427}
+{"ts": "2026-08-13T01:45:24+00:00", "event": "judge_start", "targets": 2260, "todo": 2260, "model": "Qwen/Qwen2.5-32B-Instruct"}
+{"ts": "2026-08-13T01:47:43+00:00", "event": "judge_loaded", "model": "Qwen/Qwen2.5-32B-Instruct", "mode": "native", "vram": {"gpu0": {"alloc_gb": 70.49, "reserved_gb": 70.61, "peak_gb": 70.49}}}
+{"ts": "2026-08-13T01:50:04+00:00", "event": "model_freed", "model": "judge:Qwen/Qwen2.5-32B-Instruct", "vram": {"gpu0": {"alloc_gb": 4.96, "reserved_gb": 12.02, "peak_gb": 4.96}}}
+{"ts": "2026-08-13T01:50:04+00:00", "event": "judge_done", "n": 2260, "agreement": 0.9916, "gate1": true}
+{"ts": "2026-08-13T01:50:04+00:00", "event": "manual_sheet", "path": "confidence_out/full1000/tables/gate1_manual_check_sheet.csv", "rows": 200}
+{"ts": "2026-08-13T01:50:05+00:00", "event": "figure_saved", "name": "fig1_calibration", "files": 2}
+{"ts": "2026-08-13T01:50:06+00:00", "event": "figure_saved", "name": "fig2_quadrant", "files": 2}
+{"ts": "2026-08-13T01:50:06+00:00", "event": "figure_saved", "name": "fig4_depth_prediction", "files": 2}
+{"ts": "2026-08-13T01:50:06+00:00", "event": "figure_saved", "name": "fig5_cell_commitment_grid", "files": 2}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "figure_saved", "name": "fig6_signal_correlations", "files": 2}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t1_dataset_composition", "rows": 6, "cols": 11}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t2_cell_commitment", "rows": 30, "cols": 8}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t3_parse_and_accuracy", "rows": 140, "cols": 7}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t4_grader_tier_usage", "rows": 10, "cols": 3}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t5_h0_format_agreement", "rows": 3, "cols": 6}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t6_h1_murphy_decomposition", "rows": 3, "cols": 12}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t7_probe_sweep", "rows": 50, "cols": 21}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t8_h4_depth_onsets", "rows": 10, "cols": 7}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t9_signal_correlations", "rows": 33, "cols": 9}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t10_omniscience_index", "rows": 30, "cols": 8}
+{"ts": "2026-08-13T01:50:07+00:00", "event": "table_saved", "name": "t11_abstention_split", "rows": 26, "cols": 5}
+{"ts": "2026-08-13T01:50:10+00:00", "event": "table_saved", "name": "t12_per_question_signals", "rows": 12000, "cols": 17}
+{"ts": "2026-08-13T01:50:12+00:00", "event": "table_saved", "name": "t13_semantic_entropy", "rows": 10000, "cols": 10}
+{"ts": "2026-08-13T01:50:12+00:00", "event": "table_saved", "name": "t15_hypothesis_verdicts", "rows": 5, "cols": 4}
+{"ts": "2026-08-13T01:50:12+00:00", "event": "report_written", "cells_committed": 10, "gpu_hours": 3.39}
+{"ts": "2026-08-13T01:50:12+00:00", "event": "pipeline_done", "minutes": 319.0}

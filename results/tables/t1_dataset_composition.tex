@@ -1,0 +1,16 @@
+\begin{table}
+\caption{Six-tier retrieval→reasoning ladder with per-cell splits.}
+\label{tab:t1_dataset_composition}
+\begin{tabular}{llllllrrrrr}
+\toprule
+tier & label & family & answer\_form & difficulty & source & n & n\_train & n\_cal & n\_test & max\_new\_tokens \\
+\midrule
+R1 & PopQA (top popularity quintile) & retrieval & entity & popularity: top quintile & akariasai/PopQA & 1000 & 600 & 200 & 200 & 32 \\
+R2 & PopQA (bottom popularity quintile) & retrieval & entity & popularity: bottom quintile & akariasai/PopQA & 1000 & 600 & 200 & 200 & 32 \\
+R3 & SimpleQA (adversarial retrieval) & retrieval & short & dataset design & basicv8vc/SimpleQA & 1000 & 600 & 200 & 200 & 32 \\
+C1 & GSM8K & reasoning & numeric & — & openai/gsm8k & 1000 & 600 & 200 & 200 & 256 \\
+C2 & MATH levels 1–2 & reasoning & latex & built-in level 1–2 & qwedsacf/competition\_math & 1000 & 600 & 200 & 200 & 320 \\
+C3 & MATH levels 4–5 & reasoning & latex & built-in level 4–5 & qwedsacf/competition\_math & 1000 & 600 & 200 & 200 & 448 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -65,7 +65,7 @@ grade → entropy → probe → calibrate → stats → figures → tables → r
 | `verbal` | Signal 1, formats A/B/C | §4 |
 | `forced` | forced-answer companion on every Format C Pass | §4.1 |
 | `sample` | Signal 2, N=10 at T≥0.7 | §5 |
-| `extract` | Signal 3, 5-percentile hooks at last prompt token | §6 |
+| `extract` | Signal 3, 5-percentile hooks at last prompt token; writes `variant="EXTRACT"` | §6 |
 | `grade` | deterministic grading of everything generated | §7 |
 | `entropy` | semantic-entropy clustering → behavioral confidence | §5 |
 | `probe` | logistic probe per (cell × percentile) + Gate 3 | §6 |
@@ -136,8 +136,28 @@ tier logs a `tier_short` event rather than silently under-delivering.
 | `MAX_CONCURRENT_MODELS` | `2` | Only used under `concurrent`. |
 | `CONCURRENT_MAX_PARAMS_B` | `4.0` | Models above this **always run alone**. |
 | `MODEL_REPLICAS` | `1` | Replicas of the same weights, each taking a disjoint tier slice. |
-| `PURGE_WEIGHTS_AFTER_MODEL` | `False` | Delete the HF snapshot after a model finishes. Turn **on** where storage is tight — all five models are 40.7 GB. |
+| `PURGE_WEIGHTS` | `"never"` | `never \| after_model \| after_run`. See below. |
 | `EMPTY_CACHE_EVERY_BATCHES` | `4` | `torch.cuda.empty_cache()` cadence during generation. |
+
+### `PURGE_WEIGHTS` — when disk is reclaimed
+
+GPU memory is **always** cleared after every model regardless of this setting.
+This knob only controls the on-disk HF snapshot.
+
+| Value | Behaviour | Use when |
+|---|---|---|
+| `never` | keep every snapshot | molab — disk is effectively unbounded |
+| `after_model` | delete a model's snapshot once it finishes its **final** pass | Kaggle's 20 GB cap, where peak disk matters |
+| `after_run` | delete the whole hub cache once, at the very end | you want the cleanup but not the re-downloads |
+
+> **Why `after_model` is not the obvious default.** Each model is loaded
+> **twice**: once for the pilot pass, then again for verbal/forced/sample/
+> extract. The two passes cannot be merged — the band gate needs *every*
+> model's pilot graded before any cell can be committed. Purging after pass 1
+> would force a full re-download for pass 2, so the purge is deliberately
+> suppressed on the pilot pass and fires only on the final one. It is also
+> suppressed entirely when `MODEL_REPLICAS > 1`, since the last shard to
+> finish would otherwise delete a snapshot its siblings are still reading.
 
 > **Why concurrency mostly doesn't help.** Batched decode is
 > memory-bandwidth bound: every step streams the full weight matrix once. Two
@@ -167,6 +187,11 @@ Regardless of mode, GPU memory is cleared and checkpoints flushed after
 |---|---|---|
 | `PERCENTILES` | `(0, 25, 50, 75, 100)` | Depth taps. `0` = embedding output, `100` = final block. |
 | `PROBE_LABEL` | `"correct"` | `correct` = ground truth; `entropy` = median-split semantic entropy (the Semantic Entropy Probes formulation, PLAN §6·5). |
+
+Label source priority is `EXTRACT → FORCED → SAMPLE`. Only `EXTRACT` is the
+greedy pass whose activations were actually tapped, so anything else is label
+noise relative to its paired feature vector and logs a `probe_label_fallback`
+event. Check the log before trusting a probe AUROC.
 | `PROBE_MAX_ITER` | `2000` | Logistic regression iterations. |
 | `PROBE_STORE_DTYPE` | `"float32"` | PLAN §16 standing risk 1 — never store activations in half precision. |
 | `AUROC_GATE` | `0.65` | Gate 3 threshold and the H4 onset definition. |
@@ -327,7 +352,7 @@ CFG = replace(_BASE_CFG, RUN_NAME="full", N_PER_CELL=2000,
 # Kaggle: small models only — 7B cannot finish there
 CFG = replace(_BASE_CFG, RUN_NAME="kaggle", N_PER_CELL=500,
               SKIP_MODELS=("qwen2.5-7b-instruct", "qwen2.5-7b-base"),
-              PURGE_WEIGHTS_AFTER_MODEL=True)
+              PURGE_WEIGHTS="after_run")
 
 # Small models concurrently (helps: none of them saturate the GPU)
 CFG = replace(_BASE_CFG, MODEL_EXEC="concurrent", MAX_CONCURRENT_MODELS=3,

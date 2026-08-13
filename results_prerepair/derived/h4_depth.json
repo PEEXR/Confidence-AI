@@ -1,0 +1,113 @@
+{
+  "available": true,
+  "onsets": [
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "tier": "C1",
+      "family": "reasoning",
+      "params_b": 1.54,
+      "onset": 25.0,
+      "reached": true,
+      "asymptote": 0.7655005544913802
+    },
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "tier": "C2",
+      "family": "reasoning",
+      "params_b": 1.54,
+      "onset": 0.0,
+      "reached": true,
+      "asymptote": 0.8006220506220506
+    },
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "tier": "R1",
+      "family": "retrieval",
+      "params_b": 1.54,
+      "onset": 25.0,
+      "reached": true,
+      "asymptote": 0.8645833333333333
+    },
+    {
+      "model": "qwen2.5-3b-instruct",
+      "tier": "C1",
+      "family": "reasoning",
+      "params_b": 3.09,
+      "onset": 25.0,
+      "reached": true,
+      "asymptote": 0.6973934837092732
+    },
+    {
+      "model": "qwen2.5-3b-instruct",
+      "tier": "C2",
+      "family": "reasoning",
+      "params_b": 3.09,
+      "onset": 25.0,
+      "reached": true,
+      "asymptote": 0.7045259545259546
+    },
+    {
+      "model": "qwen2.5-3b-instruct",
+      "tier": "R1",
+      "family": "retrieval",
+      "params_b": 3.09,
+      "onset": 25.0,
+      "reached": true,
+      "asymptote": 0.9108693377968408
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "C1",
+      "family": "reasoning",
+      "params_b": 7.62,
+      "onset": 25.0,
+      "reached": true,
+      "asymptote": 0.7573401534526853
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "C2",
+      "family": "reasoning",
+      "params_b": 7.62,
+      "onset": 25.0,
+      "reached": true,
+      "asymptote": 0.6825062656641604
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "C3",
+      "family": "reasoning",
+      "params_b": 7.62,
+      "onset": 25.0,
+      "reached": true,
+      "asymptote": 0.6687370600414079
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "R1",
+      "family": "retrieval",
+      "params_b": 7.62,
+      "onset": 25.0,
+      "reached": true,
+      "asymptote": 0.8496510673234812
+    }
+  ],
+  "mean_onset_retrieval": 25.0,
+  "mean_onset_reasoning": 21.428571428571427,
+  "delta_reasoning_minus_retrieval": {
+    "delta": -3.571428571428573,
+    "lo": -10.714285714285714,
+    "hi": 0.0,
+    "excludes_zero": false
+  },
+  "n_reasoning_never_reached": 0,
+  "spearman_onset_vs_scale": {
+    "rho": 0.4303314829119352,
+    "p": 0.21445866072113845,
+    "n": 10,
+    "lo": 0.31497039417435596,
+    "hi": 0.8017837257372732
+  },
+  "h4_pass": false,
+  "verdict": "H4 falsified / null — onset curves overlap, or reasoning never reaches the gate"
+}

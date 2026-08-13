@@ -1,0 +1,610 @@
+{
+  "canonical_format": "B",
+  "format_ece": {
+    "A": 0.5407778915046059,
+    "B": 4.9373309727750355e-17,
+    "C": 0.4219211394823692
+  },
+  "cells": {
+    "qwen2.5-0.5b-instruct__C1": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__C2": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__C3": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__R1": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__R2": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__R3": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__C1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 200,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 63,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 200,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__C2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 200,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 68,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 200,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__C3": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__R1": {
+      "verbal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 50,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 199,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__R2": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__R3": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__C1": {
+      "verbal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 45,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 199,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__C2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 200,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 46,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 200,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__C3": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__R1": {
+      "verbal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 4,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 37,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 199,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__R2": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__R3": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__C1": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__C2": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__C3": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__R1": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__R2": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__R3": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__C1": {
+      "verbal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 38,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 200,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__C2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 200,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 43,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 200,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__C3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 200,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 52,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 200,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__R1": {
+      "verbal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 200,
+        "n_distinct": 39,
+        "excluded": false
+      },
+      "internal": {
+        "method": "isotonic",
+        "n_cal": 200,
+        "n_distinct": 200,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__R2": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__R3": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 0,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    }
+  }
+}

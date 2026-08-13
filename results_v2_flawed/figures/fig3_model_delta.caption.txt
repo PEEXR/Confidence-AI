@@ -1,0 +1,1 @@
+Figure 3 — hopeful-confidence and missed-knowledge rates, Qwen2.5-7B base vs Instruct. Predicted under H3: hopeful rate drops without a matched rise in missed knowledge. Null: overlapping bars / equal rates.

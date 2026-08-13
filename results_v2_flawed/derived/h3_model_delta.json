@@ -1,0 +1,20 @@
+{
+  "available": true,
+  "n_matched": 600,
+  "hopeful_rate_base": 0.0016666666666666668,
+  "hopeful_rate_instruct": 0.28,
+  "delta_base_minus_instruct": {
+    "delta": -0.2783333333333334,
+    "lo": -0.3116666666666667,
+    "hi": -0.24166666666666667,
+    "excludes_zero": true
+  },
+  "missed_knowledge_rate": {
+    "qwen2.5-7b-base": 0.14286666666666667,
+    "qwen2.5-7b-instruct": 0.24539999999999998
+  },
+  "missed_knowledge_rise": 0.10253333333333331,
+  "guard_passes": false,
+  "h3_pass": false,
+  "verdict": "H3 falsified / null — delta CI includes 0 or the missed-knowledge guard fired"
+}

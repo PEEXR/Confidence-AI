@@ -1,0 +1,1 @@
+Supplementary — pilot accuracy per (model × tier) cell. A ragged grid is the planned outcome (PLAN §3, §10), not a failure.

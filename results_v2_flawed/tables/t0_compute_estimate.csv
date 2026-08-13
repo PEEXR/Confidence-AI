@@ -1,0 +1,6 @@
+model,params_b,weights_gb,fits_one_gpu,est_tok_per_s,est_gpu_hours,activations_mb
+qwen2.5-0.5b-instruct,0.49,1.0,True,21918,0.2,107.5
+qwen2.5-1.5b-instruct,1.54,3.1,True,6974,0.63,184.3
+qwen2.5-3b-instruct,3.09,6.2,True,3475,1.27,245.8
+qwen2.5-7b-instruct,7.62,15.2,True,1409,3.13,430.1
+qwen2.5-7b-base,7.62,15.2,True,1409,3.13,430.1

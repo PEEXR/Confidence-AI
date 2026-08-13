@@ -1,0 +1,159 @@
+{
+  "total_passes": 2567,
+  "by_category": {
+    "justified_hedge": 1772,
+    "missed_knowledge": 795
+  },
+  "per_cell": {
+    "qwen2.5-0.5b-instruct__C1": {
+      "n_passes": 62,
+      "justified_hedge": 56,
+      "missed_knowledge": 6,
+      "missed_knowledge_rate": 0.0968
+    },
+    "qwen2.5-0.5b-instruct__C2": {
+      "n_passes": 53,
+      "justified_hedge": 43,
+      "missed_knowledge": 10,
+      "missed_knowledge_rate": 0.1887
+    },
+    "qwen2.5-0.5b-instruct__C3": {
+      "n_passes": 37,
+      "justified_hedge": 36,
+      "missed_knowledge": 1,
+      "missed_knowledge_rate": 0.027
+    },
+    "qwen2.5-0.5b-instruct__R3": {
+      "n_passes": 1,
+      "justified_hedge": 1,
+      "missed_knowledge_rate": 0.0
+    },
+    "qwen2.5-1.5b-instruct__C1": {
+      "n_passes": 395,
+      "missed_knowledge": 196,
+      "justified_hedge": 199,
+      "missed_knowledge_rate": 0.4962
+    },
+    "qwen2.5-1.5b-instruct__C2": {
+      "n_passes": 370,
+      "justified_hedge": 195,
+      "missed_knowledge": 175,
+      "missed_knowledge_rate": 0.473
+    },
+    "qwen2.5-1.5b-instruct__C3": {
+      "n_passes": 40,
+      "justified_hedge": 26,
+      "missed_knowledge": 14,
+      "missed_knowledge_rate": 0.35
+    },
+    "qwen2.5-1.5b-instruct__R1": {
+      "n_passes": 915,
+      "justified_hedge": 659,
+      "missed_knowledge": 256,
+      "missed_knowledge_rate": 0.2798
+    },
+    "qwen2.5-1.5b-instruct__R2": {
+      "n_passes": 96,
+      "justified_hedge": 79,
+      "missed_knowledge": 17,
+      "missed_knowledge_rate": 0.1771
+    },
+    "qwen2.5-1.5b-instruct__R3": {
+      "n_passes": 92,
+      "justified_hedge": 92,
+      "missed_knowledge_rate": 0.0
+    },
+    "qwen2.5-3b-instruct__C1": {
+      "n_passes": 16,
+      "justified_hedge": 13,
+      "missed_knowledge": 3,
+      "missed_knowledge_rate": 0.1875
+    },
+    "qwen2.5-3b-instruct__C2": {
+      "n_passes": 28,
+      "missed_knowledge": 6,
+      "justified_hedge": 22,
+      "missed_knowledge_rate": 0.2143
+    },
+    "qwen2.5-3b-instruct__C3": {
+      "n_passes": 7,
+      "justified_hedge": 7,
+      "missed_knowledge_rate": 0.0
+    },
+    "qwen2.5-3b-instruct__R1": {
+      "n_passes": 54,
+      "missed_knowledge": 18,
+      "justified_hedge": 36,
+      "missed_knowledge_rate": 0.3333
+    },
+    "qwen2.5-3b-instruct__R2": {
+      "n_passes": 11,
+      "justified_hedge": 7,
+      "missed_knowledge": 4,
+      "missed_knowledge_rate": 0.3636
+    },
+    "qwen2.5-3b-instruct__R3": {
+      "n_passes": 4,
+      "justified_hedge": 4,
+      "missed_knowledge_rate": 0.0
+    },
+    "qwen2.5-7b-base__C2": {
+      "n_passes": 5,
+      "justified_hedge": 4,
+      "missed_knowledge": 1,
+      "missed_knowledge_rate": 0.2
+    },
+    "qwen2.5-7b-base__C3": {
+      "n_passes": 3,
+      "justified_hedge": 3,
+      "missed_knowledge_rate": 0.0
+    },
+    "qwen2.5-7b-base__R2": {
+      "n_passes": 1,
+      "justified_hedge": 1,
+      "missed_knowledge_rate": 0.0
+    },
+    "qwen2.5-7b-base__R3": {
+      "n_passes": 1,
+      "justified_hedge": 1,
+      "missed_knowledge_rate": 0.0
+    },
+    "qwen2.5-7b-instruct__C1": {
+      "n_passes": 3,
+      "missed_knowledge": 2,
+      "justified_hedge": 1,
+      "missed_knowledge_rate": 0.6667
+    },
+    "qwen2.5-7b-instruct__C2": {
+      "n_passes": 10,
+      "justified_hedge": 9,
+      "missed_knowledge": 1,
+      "missed_knowledge_rate": 0.1
+    },
+    "qwen2.5-7b-instruct__C3": {
+      "n_passes": 17,
+      "justified_hedge": 13,
+      "missed_knowledge": 4,
+      "missed_knowledge_rate": 0.2353
+    },
+    "qwen2.5-7b-instruct__R1": {
+      "n_passes": 239,
+      "justified_hedge": 168,
+      "missed_knowledge": 71,
+      "missed_knowledge_rate": 0.2971
+    },
+    "qwen2.5-7b-instruct__R2": {
+      "n_passes": 59,
+      "missed_knowledge": 9,
+      "justified_hedge": 50,
+      "missed_knowledge_rate": 0.1525
+    },
+    "qwen2.5-7b-instruct__R3": {
+      "n_passes": 48,
+      "justified_hedge": 47,
+      "missed_knowledge": 1,
+      "missed_knowledge_rate": 0.0208
+    }
+  },
+  "caveat": "Forced answers are accuracy under compulsion, not ground truth about the original hedge (PLAN §4.1)."
+}

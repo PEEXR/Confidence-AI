@@ -1,0 +1,171 @@
+{
+  "provenance": {
+    "run_name": "full1000",
+    "config_hash": "e9760b8e7a1d",
+    "seed": 20260813,
+    "code_sha": "nogit",
+    "platform": "molab",
+    "devices": {
+      "cuda": true,
+      "n_gpu": 1,
+      "gpus": [
+        {
+          "index": 0,
+          "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+          "vram_gb": 101.97,
+          "capability": "12.0"
+        }
+      ],
+      "total_vram_gb": 101.97,
+      "max_vram_gb": 101.97,
+      "bf16": true,
+      "torch": "2.11.0+cu130",
+      "python": "3.13.11"
+    },
+    "dtype": "torch.bfloat16",
+    "started_utc": "2026-08-13T06:09:48+00:00",
+    "transformers": "5.14.1",
+    "torch": "2.11.0+cu130",
+    "math_verify": true
+  },
+  "finished_utc": "2026-08-13T06:13:40+00:00",
+  "grid": {
+    "models": [
+      "qwen2.5-0.5b-instruct",
+      "qwen2.5-1.5b-instruct",
+      "qwen2.5-3b-instruct",
+      "qwen2.5-7b-instruct",
+      "qwen2.5-7b-base"
+    ],
+    "tiers": [
+      "R1",
+      "R2",
+      "R3",
+      "C1",
+      "C2",
+      "C3"
+    ],
+    "cells_total": 30,
+    "cells_committed": 13,
+    "ragged_by": 17
+  },
+  "questions": {
+    "R1": 1000,
+    "R2": 1000,
+    "R3": 1000,
+    "C1": 1000,
+    "C2": 1000,
+    "C3": 1000
+  },
+  "gates": {
+    "gate1_grading_sanity": {
+      "pass": null,
+      "automated_agreement": null,
+      "note": "Requires the manual check sheet to be filled in to close fully (PLAN §16)."
+    },
+    "gate2_format_agreement": {
+      "pass": false,
+      "min_lower_ci": -0.08681062822618826
+    },
+    "gate3_probe_validity": {
+      "cells": 13,
+      "passed": 11,
+      "dirty_activation_cells": 0
+    },
+    "gate4_model_comparison": {
+      "pass": false,
+      "available": true
+    }
+  },
+  "hypotheses": {
+    "H0": "H0 falsified — report all three formats separately (PLAN §16 Gate 2 fallback)",
+    "H1": "H1 falsified — CIs overlap, no ordering distinguishable",
+    "H2": "H2 supported — quadrant membership associates with question features beyond the shuffle null",
+    "H3": "H3 falsified / null — delta CI includes 0 or the missed-knowledge guard fired",
+    "H4": "H4 falsified / null — onset curves overlap, or reasoning never reaches the gate"
+  },
+  "entropy_sanity": {
+    "all_same_confidence": 1.0,
+    "even_split_confidence": 0.0,
+    "n_samples": 10,
+    "passes": true
+  },
+  "hierarchical_regression": {
+    "method": "bayes_mixed_glm",
+    "n": 1199,
+    "pseudo_r2": null
+  },
+  "compute": {
+    "measured_gpu_hours": 4.783,
+    "by_model": {
+      "qwen2.5-0.5b-instruct": 0.027,
+      "qwen2.5-1.5b-instruct": 0.624,
+      "qwen2.5-3b-instruct": 0.732,
+      "qwen2.5-7b-base": 1.525,
+      "qwen2.5-7b-instruct": 1.875
+    }
+  },
+  "judge": {
+    "enabled": false,
+    "judge_model": null,
+    "n_decided": null,
+    "agreement_overall": null,
+    "agreement_by_grader": null
+  },
+  "artifacts": {
+    "figures": [
+      "fig1_calibration.png",
+      "fig2_quadrant.png",
+      "fig3_model_delta.png",
+      "fig4_depth_prediction.png",
+      "fig5_cell_commitment_grid.png",
+      "fig6_signal_correlations.png"
+    ],
+    "tables": [
+      "gate1_manual_check_sheet.csv",
+      "t0_compute_estimate.csv",
+      "t10_omniscience_index.csv",
+      "t11_abstention_split.csv",
+      "t12_per_question_signals.csv",
+      "t13_semantic_entropy.csv",
+      "t15_hypothesis_verdicts.csv",
+      "t1_dataset_composition.csv",
+      "t2_cell_commitment.csv",
+      "t3_parse_and_accuracy.csv",
+      "t4_grader_tier_usage.csv",
+      "t5_h0_format_agreement.csv",
+      "t6_h1_murphy_decomposition.csv",
+      "t7_probe_sweep.csv",
+      "t8_h4_depth_onsets.csv",
+      "t9_signal_correlations.csv"
+    ],
+    "derived": [
+      "abstention_split.json",
+      "abstention_split.parquet",
+      "bucket_mapping.json",
+      "calibration_meta.json",
+      "cell_commitments.json",
+      "compute_ledger.parquet",
+      "correlations.parquet",
+      "entropy.parquet",
+      "entropy_sanity.json",
+      "gate3.json",
+      "graded.jsonl",
+      "graded.parquet",
+      "h0_gate2.json",
+      "h1_calibration.json",
+      "h2_quadrants.json",
+      "h3_model_delta.json",
+      "h4_depth.json",
+      "h4_onsets.parquet",
+      "hierarchical_regression.json",
+      "judge.jsonl",
+      "judge.parquet",
+      "judge_agreement.json",
+      "omniscience_index.parquet",
+      "probe_sweep.parquet",
+      "quadrants.parquet",
+      "signals.parquet"
+    ]
+  }
+}

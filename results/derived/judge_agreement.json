@@ -1,0 +1,50 @@
+{
+  "enabled": true,
+  "n": 2560,
+  "n_decided": 2560,
+  "judge_model": "Qwen/Qwen2.5-32B-Instruct",
+  "agreement_overall": 0.9844,
+  "agreement_by_answer_form": {
+    "entity": {
+      "n": 199,
+      "agreement": 0.9246
+    },
+    "latex": {
+      "n": 200,
+      "agreement": 0.91
+    },
+    "numeric": {
+      "n": 415,
+      "agreement": 0.9976
+    },
+    "short": {
+      "n": 1746,
+      "agreement": 0.9966
+    }
+  },
+  "agreement_by_grader": {
+    "alias_exact": {
+      "n": 214,
+      "agreement": 0.9159
+    },
+    "nli": {
+      "n": 1731,
+      "agreement": 0.9983
+    },
+    "numeric": {
+      "n": 200,
+      "agreement": 0.995
+    },
+    "string_fallback": {
+      "n": 215,
+      "agreement": 1.0
+    },
+    "symbolic": {
+      "n": 200,
+      "agreement": 0.91
+    }
+  },
+  "gate1_threshold": 0.95,
+  "gate1_pass": true,
+  "note": "Judge is a secondary audit label. Deterministic grading remains primary; this agreement rate is the reported grading-sanity statistic (PLAN §7, §16 Gate 1). Manual verification of a subsample is still required to close Gate 1 fully."
+}

@@ -1,0 +1,75 @@
+\begin{table}
+\caption{Probe AUROC per (cell × layer percentile) with shuffle-null and surface baselines.}
+\label{tab:t7_probe_sweep}
+\begin{tabular}{llllrrrrrrrrrrrrrrrrr}
+\toprule
+cell & model & tier & family & params\_b & layer\_pct & layer\_index & n\_train & n\_cal & n\_test & base\_rate & auroc\_train & auroc\_cal & auroc\_test & auroc\_null\_mean & auroc\_null\_p95 & beats\_null & auroc\_surface & beats\_surface & nonfinite\_frac & meets\_gate \\
+\midrule
+qwen2.5-1.5b-instruct\_\_R1 & qwen2.5-1.5b-instruct & R1 & retrieval & 1.540 & 0 & 0 & 600 & 200 & 200 & 0.343 & 0.504 & 0.508 & 0.515 & 0.502 & 0.508 & False & 0.791 & False & 0.000 & False \\
+qwen2.5-1.5b-instruct\_\_R1 & qwen2.5-1.5b-instruct & R1 & retrieval & 1.540 & 25 & 7 & 600 & 200 & 200 & 0.343 & 1.000 & 0.807 & 0.873 & 0.492 & 0.578 & True & 0.791 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_R1 & qwen2.5-1.5b-instruct & R1 & retrieval & 1.540 & 50 & 14 & 600 & 200 & 200 & 0.343 & 1.000 & 0.848 & 0.856 & 0.486 & 0.537 & True & 0.791 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_R1 & qwen2.5-1.5b-instruct & R1 & retrieval & 1.540 & 75 & 21 & 600 & 200 & 200 & 0.343 & 1.000 & 0.865 & 0.860 & 0.476 & 0.605 & True & 0.791 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_R1 & qwen2.5-1.5b-instruct & R1 & retrieval & 1.540 & 100 & 28 & 600 & 200 & 200 & 0.343 & 1.000 & 0.841 & 0.849 & 0.485 & 0.564 & True & 0.791 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_C1 & qwen2.5-1.5b-instruct & C1 & reasoning & 1.540 & 0 & 0 & 600 & 200 & 200 & 0.517 & 0.545 & 0.550 & 0.515 & 0.504 & 0.532 & True & 0.535 & True & 0.000 & False \\
+qwen2.5-1.5b-instruct\_\_C1 & qwen2.5-1.5b-instruct & C1 & reasoning & 1.540 & 25 & 7 & 600 & 200 & 200 & 0.517 & 1.000 & 0.766 & 0.740 & 0.497 & 0.561 & True & 0.535 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_C1 & qwen2.5-1.5b-instruct & C1 & reasoning & 1.540 & 50 & 14 & 600 & 200 & 200 & 0.517 & 1.000 & 0.763 & 0.726 & 0.497 & 0.540 & True & 0.535 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_C1 & qwen2.5-1.5b-instruct & C1 & reasoning & 1.540 & 75 & 21 & 600 & 200 & 200 & 0.517 & 1.000 & 0.737 & 0.654 & 0.500 & 0.567 & True & 0.535 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_C1 & qwen2.5-1.5b-instruct & C1 & reasoning & 1.540 & 100 & 28 & 600 & 200 & 200 & 0.517 & 1.000 & 0.716 & 0.698 & 0.506 & 0.566 & True & 0.535 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_C2 & qwen2.5-1.5b-instruct & C2 & reasoning & 1.540 & 0 & 0 & 600 & 200 & 200 & 0.387 & 0.628 & 0.659 & 0.589 & 0.519 & 0.573 & True & 0.631 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_C2 & qwen2.5-1.5b-instruct & C2 & reasoning & 1.540 & 25 & 7 & 600 & 200 & 200 & 0.387 & 0.999 & 0.801 & 0.744 & 0.521 & 0.610 & True & 0.631 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_C2 & qwen2.5-1.5b-instruct & C2 & reasoning & 1.540 & 50 & 14 & 600 & 200 & 200 & 0.387 & 1.000 & 0.754 & 0.704 & 0.515 & 0.586 & True & 0.631 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_C2 & qwen2.5-1.5b-instruct & C2 & reasoning & 1.540 & 75 & 21 & 600 & 200 & 200 & 0.387 & 1.000 & 0.792 & 0.682 & 0.515 & 0.596 & True & 0.631 & True & 0.000 & True \\
+qwen2.5-1.5b-instruct\_\_C2 & qwen2.5-1.5b-instruct & C2 & reasoning & 1.540 & 100 & 28 & 600 & 200 & 200 & 0.387 & 1.000 & 0.755 & 0.650 & 0.533 & 0.602 & True & 0.631 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_R1 & qwen2.5-3b-instruct & R1 & retrieval & 3.090 & 0 & 0 & 600 & 200 & 200 & 0.388 & 0.511 & 0.508 & 0.516 & 0.500 & 0.508 & False & 0.822 & False & 0.000 & False \\
+qwen2.5-3b-instruct\_\_R1 & qwen2.5-3b-instruct & R1 & retrieval & 3.090 & 25 & 9 & 600 & 200 & 200 & 0.388 & 0.999 & 0.829 & 0.873 & 0.510 & 0.610 & True & 0.822 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_R1 & qwen2.5-3b-instruct & R1 & retrieval & 3.090 & 50 & 18 & 600 & 200 & 200 & 0.388 & 1.000 & 0.851 & 0.860 & 0.510 & 0.576 & True & 0.822 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_R1 & qwen2.5-3b-instruct & R1 & retrieval & 3.090 & 75 & 27 & 600 & 200 & 200 & 0.388 & 1.000 & 0.911 & 0.862 & 0.507 & 0.578 & True & 0.822 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_R1 & qwen2.5-3b-instruct & R1 & retrieval & 3.090 & 100 & 36 & 600 & 200 & 200 & 0.388 & 1.000 & 0.884 & 0.869 & 0.486 & 0.573 & True & 0.822 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_C1 & qwen2.5-3b-instruct & C1 & reasoning & 3.090 & 0 & 0 & 600 & 200 & 200 & 0.395 & 0.503 & 0.506 & 0.491 & 0.498 & 0.506 & False & 0.580 & False & 0.000 & False \\
+qwen2.5-3b-instruct\_\_C1 & qwen2.5-3b-instruct & C1 & reasoning & 3.090 & 25 & 9 & 600 & 200 & 200 & 0.395 & 1.000 & 0.666 & 0.704 & 0.503 & 0.547 & True & 0.580 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_C1 & qwen2.5-3b-instruct & C1 & reasoning & 3.090 & 50 & 18 & 600 & 200 & 200 & 0.395 & 1.000 & 0.696 & 0.717 & 0.494 & 0.575 & True & 0.580 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_C1 & qwen2.5-3b-instruct & C1 & reasoning & 3.090 & 75 & 27 & 600 & 200 & 200 & 0.395 & 1.000 & 0.684 & 0.637 & 0.499 & 0.551 & True & 0.580 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_C1 & qwen2.5-3b-instruct & C1 & reasoning & 3.090 & 100 & 36 & 600 & 200 & 200 & 0.395 & 1.000 & 0.697 & 0.659 & 0.499 & 0.578 & True & 0.580 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_C2 & qwen2.5-3b-instruct & C2 & reasoning & 3.090 & 0 & 0 & 600 & 200 & 200 & 0.358 & 0.511 & 0.500 & 0.504 & 0.500 & 0.500 & False & 0.591 & False & 0.000 & False \\
+qwen2.5-3b-instruct\_\_C2 & qwen2.5-3b-instruct & C2 & reasoning & 3.090 & 25 & 9 & 600 & 200 & 200 & 0.358 & 1.000 & 0.705 & 0.647 & 0.509 & 0.560 & True & 0.591 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_C2 & qwen2.5-3b-instruct & C2 & reasoning & 3.090 & 50 & 18 & 600 & 200 & 200 & 0.358 & 1.000 & 0.671 & 0.614 & 0.504 & 0.565 & True & 0.591 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_C2 & qwen2.5-3b-instruct & C2 & reasoning & 3.090 & 75 & 27 & 600 & 200 & 200 & 0.358 & 1.000 & 0.681 & 0.515 & 0.495 & 0.567 & True & 0.591 & True & 0.000 & True \\
+qwen2.5-3b-instruct\_\_C2 & qwen2.5-3b-instruct & C2 & reasoning & 3.090 & 100 & 36 & 600 & 200 & 200 & 0.358 & 1.000 & 0.654 & 0.533 & 0.510 & 0.591 & True & 0.591 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_R1 & qwen2.5-7b-instruct & R1 & retrieval & 7.620 & 0 & 0 & 600 & 200 & 200 & 0.452 & 0.524 & 0.507 & 0.489 & 0.501 & 0.516 & False & 0.799 & False & 0.000 & False \\
+qwen2.5-7b-instruct\_\_R1 & qwen2.5-7b-instruct & R1 & retrieval & 7.620 & 25 & 7 & 600 & 200 & 200 & 0.452 & 1.000 & 0.791 & 0.752 & 0.501 & 0.607 & True & 0.799 & False & 0.000 & True \\
+qwen2.5-7b-instruct\_\_R1 & qwen2.5-7b-instruct & R1 & retrieval & 7.620 & 50 & 14 & 600 & 200 & 200 & 0.452 & 1.000 & 0.842 & 0.830 & 0.513 & 0.572 & True & 0.799 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_R1 & qwen2.5-7b-instruct & R1 & retrieval & 7.620 & 75 & 21 & 600 & 200 & 200 & 0.452 & 1.000 & 0.850 & 0.836 & 0.505 & 0.576 & True & 0.799 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_R1 & qwen2.5-7b-instruct & R1 & retrieval & 7.620 & 100 & 28 & 600 & 200 & 200 & 0.452 & 1.000 & 0.833 & 0.771 & 0.504 & 0.572 & True & 0.799 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_C1 & qwen2.5-7b-instruct & C1 & reasoning & 7.620 & 0 & 0 & 600 & 200 & 200 & 0.573 & 0.509 & 0.494 & 0.496 & 0.507 & 0.518 & False & 0.657 & False & 0.000 & False \\
+qwen2.5-7b-instruct\_\_C1 & qwen2.5-7b-instruct & C1 & reasoning & 7.620 & 25 & 7 & 600 & 200 & 200 & 0.573 & 1.000 & 0.714 & 0.726 & 0.486 & 0.546 & True & 0.657 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_C1 & qwen2.5-7b-instruct & C1 & reasoning & 7.620 & 50 & 14 & 600 & 200 & 200 & 0.573 & 1.000 & 0.757 & 0.744 & 0.500 & 0.567 & True & 0.657 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_C1 & qwen2.5-7b-instruct & C1 & reasoning & 7.620 & 75 & 21 & 600 & 200 & 200 & 0.573 & 1.000 & 0.738 & 0.775 & 0.494 & 0.561 & True & 0.657 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_C1 & qwen2.5-7b-instruct & C1 & reasoning & 7.620 & 100 & 28 & 600 & 200 & 200 & 0.573 & 1.000 & 0.705 & 0.769 & 0.509 & 0.587 & True & 0.657 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_C2 & qwen2.5-7b-instruct & C2 & reasoning & 7.620 & 0 & 0 & 600 & 200 & 200 & 0.530 & 0.512 & 0.521 & 0.495 & 0.510 & 0.521 & False & 0.615 & False & 0.000 & False \\
+qwen2.5-7b-instruct\_\_C2 & qwen2.5-7b-instruct & C2 & reasoning & 7.620 & 25 & 7 & 600 & 200 & 200 & 0.530 & 1.000 & 0.656 & 0.619 & 0.496 & 0.566 & True & 0.615 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_C2 & qwen2.5-7b-instruct & C2 & reasoning & 7.620 & 50 & 14 & 600 & 200 & 200 & 0.530 & 1.000 & 0.665 & 0.641 & 0.500 & 0.564 & True & 0.615 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_C2 & qwen2.5-7b-instruct & C2 & reasoning & 7.620 & 75 & 21 & 600 & 200 & 200 & 0.530 & 1.000 & 0.683 & 0.658 & 0.504 & 0.568 & True & 0.615 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_C2 & qwen2.5-7b-instruct & C2 & reasoning & 7.620 & 100 & 28 & 600 & 200 & 200 & 0.530 & 1.000 & 0.642 & 0.652 & 0.501 & 0.550 & True & 0.615 & True & 0.000 & False \\
+qwen2.5-7b-instruct\_\_C3 & qwen2.5-7b-instruct & C3 & reasoning & 7.620 & 0 & 0 & 600 & 200 & 200 & 0.207 & 0.518 & 0.503 & 0.503 & 0.502 & 0.532 & False & 0.615 & False & 0.000 & False \\
+qwen2.5-7b-instruct\_\_C3 & qwen2.5-7b-instruct & C3 & reasoning & 7.620 & 25 & 7 & 600 & 200 & 200 & 0.207 & 1.000 & 0.669 & 0.641 & 0.516 & 0.597 & True & 0.615 & True & 0.000 & True \\
+qwen2.5-7b-instruct\_\_C3 & qwen2.5-7b-instruct & C3 & reasoning & 7.620 & 50 & 14 & 600 & 200 & 200 & 0.207 & 1.000 & 0.600 & 0.597 & 0.517 & 0.569 & True & 0.615 & False & 0.000 & False \\
+qwen2.5-7b-instruct\_\_C3 & qwen2.5-7b-instruct & C3 & reasoning & 7.620 & 75 & 21 & 600 & 200 & 200 & 0.207 & 1.000 & 0.615 & 0.637 & 0.529 & 0.585 & True & 0.615 & True & 0.000 & False \\
+qwen2.5-7b-instruct\_\_C3 & qwen2.5-7b-instruct & C3 & reasoning & 7.620 & 100 & 28 & 600 & 200 & 200 & 0.207 & 1.000 & 0.556 & 0.646 & 0.499 & 0.561 & False & 0.615 & False & 0.000 & False \\
+qwen2.5-7b-base\_\_R1 & qwen2.5-7b-base & R1 & retrieval & 7.620 & 0 & 0 & 600 & 200 & 200 & 0.513 & 0.718 & 0.717 & 0.703 & 0.487 & 0.586 & True & 0.815 & False & 0.000 & True \\
+qwen2.5-7b-base\_\_R1 & qwen2.5-7b-base & R1 & retrieval & 7.620 & 25 & 7 & 600 & 200 & 200 & 0.513 & 0.996 & 0.821 & 0.793 & 0.478 & 0.524 & True & 0.815 & True & 0.000 & True \\
+qwen2.5-7b-base\_\_R1 & qwen2.5-7b-base & R1 & retrieval & 7.620 & 50 & 14 & 600 & 200 & 200 & 0.513 & 1.000 & 0.823 & 0.773 & 0.497 & 0.592 & True & 0.815 & True & 0.000 & True \\
+qwen2.5-7b-base\_\_R1 & qwen2.5-7b-base & R1 & retrieval & 7.620 & 75 & 21 & 600 & 200 & 200 & 0.513 & 1.000 & 0.835 & 0.806 & 0.514 & 0.579 & True & 0.815 & True & 0.000 & True \\
+qwen2.5-7b-base\_\_R1 & qwen2.5-7b-base & R1 & retrieval & 7.620 & 100 & 28 & 600 & 200 & 200 & 0.513 & 1.000 & 0.807 & 0.792 & 0.498 & 0.556 & True & 0.815 & False & 0.000 & True \\
+qwen2.5-7b-base\_\_C1 & qwen2.5-7b-base & C1 & reasoning & 7.620 & 0 & 0 & 600 & 200 & 200 & 0.428 & 0.795 & 0.572 & 0.610 & 0.491 & 0.552 & True & 0.564 & True & 0.000 & False \\
+qwen2.5-7b-base\_\_C1 & qwen2.5-7b-base & C1 & reasoning & 7.620 & 25 & 7 & 600 & 200 & 200 & 0.428 & 0.997 & 0.588 & 0.544 & 0.474 & 0.529 & True & 0.564 & True & 0.000 & False \\
+qwen2.5-7b-base\_\_C1 & qwen2.5-7b-base & C1 & reasoning & 7.620 & 50 & 14 & 600 & 200 & 200 & 0.428 & 1.000 & 0.566 & 0.580 & 0.474 & 0.528 & True & 0.564 & True & 0.000 & False \\
+qwen2.5-7b-base\_\_C1 & qwen2.5-7b-base & C1 & reasoning & 7.620 & 75 & 21 & 600 & 200 & 200 & 0.428 & 0.999 & 0.555 & 0.622 & 0.490 & 0.529 & True & 0.564 & False & 0.000 & False \\
+qwen2.5-7b-base\_\_C1 & qwen2.5-7b-base & C1 & reasoning & 7.620 & 100 & 28 & 600 & 200 & 200 & 0.428 & 0.999 & 0.566 & 0.621 & 0.489 & 0.550 & True & 0.564 & True & 0.000 & False \\
+qwen2.5-7b-base\_\_C2 & qwen2.5-7b-base & C2 & reasoning & 7.620 & 0 & 0 & 600 & 200 & 200 & 0.488 & 0.765 & 0.483 & 0.486 & 0.496 & 0.551 & False & 0.583 & False & 0.000 & False \\
+qwen2.5-7b-base\_\_C2 & qwen2.5-7b-base & C2 & reasoning & 7.620 & 25 & 7 & 600 & 200 & 200 & 0.488 & 1.000 & 0.506 & 0.500 & 0.495 & 0.556 & False & 0.583 & False & 0.000 & False \\
+qwen2.5-7b-base\_\_C2 & qwen2.5-7b-base & C2 & reasoning & 7.620 & 50 & 14 & 600 & 200 & 200 & 0.488 & 1.000 & 0.491 & 0.522 & 0.491 & 0.529 & False & 0.583 & False & 0.000 & False \\
+qwen2.5-7b-base\_\_C2 & qwen2.5-7b-base & C2 & reasoning & 7.620 & 75 & 21 & 600 & 200 & 200 & 0.488 & 1.000 & 0.493 & 0.499 & 0.483 & 0.558 & False & 0.583 & False & 0.000 & False \\
+qwen2.5-7b-base\_\_C2 & qwen2.5-7b-base & C2 & reasoning & 7.620 & 100 & 28 & 600 & 200 & 200 & 0.488 & 1.000 & 0.498 & 0.527 & 0.489 & 0.540 & False & 0.583 & False & 0.000 & False \\
+\bottomrule
+\end{tabular}
+\end{table}

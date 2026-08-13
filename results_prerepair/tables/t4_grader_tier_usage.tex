@@ -1,0 +1,20 @@
+\begin{table}
+\caption{Which grading tier resolved each item — the LLM-judge-free audit trail.}
+\label{tab:t4_grader_tier_usage}
+\begin{tabular}{llr}
+\toprule
+answer\_form & grader & n \\
+\midrule
+entity & alias\_exact & 43924 \\
+entity & no\_answer & 2262 \\
+latex & no\_answer & 3301 \\
+latex & symbolic & 55880 \\
+numeric & no\_answer & 1439 \\
+numeric & numeric & 41828 \\
+numeric & string\_fallback & 214 \\
+short & alias\_exact & 15 \\
+short & nli & 1731 \\
+short & no\_answer & 254 \\
+\bottomrule
+\end{tabular}
+\end{table}
