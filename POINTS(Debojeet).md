@@ -2,9 +2,9 @@
 
 ---
 ###### NOTE: ALL "NOTES" ARE HANDWRITTEN AND ARE IMPORTANT
-TO DO: Human grading sanity check is still left, then review and further decisions.
-CURRENTLY : going through tables and derived
-UNDERSTOOD: Eval Methods, hypotheses, figures
+TO DO: Review and further decisions.
+COMPLETED: Gate 1 Human Grading Sanity Check (97.5% agreement, gate passed!)
+UNDERSTOOD: Eval Methods, hypotheses, figures, tables, derived
 ---
 
 ## differences between results, results prepair and resultsv2flawed
@@ -678,3 +678,250 @@ In confidence and calibration research, testing a model on arbitrary datasets wi
 | **Hard Math (`C3`)** | **Near Zero ($\mathbf{0.04}$)** | **Near Zero ($\mathbf{0.03}$)** | Weak ($\mathbf{0.16}$) | **Complete Decoupling**: Verbal confidence is purely decorative; the model has no metacognitive verbal access to its internal reasoning limits. |
 
 # Understanding Tables
+---
+
+### [Table 0 · Compute Ledger & Resource Estimates]results/tables/t0_compute_estimate.csv (`t0_compute_estimate.csv`)
+* **Purpose**: Pre-flight feasibility assessment verifying memory footprints, GPU-hour budgets, and activation tensor sizes.
+* **Key Contents**:
+  * Evaluated across 5 models: `0.5B` (0.49B params, 1.0 GB weights) $\rightarrow$ `7B` (7.62B params, 15.2 GB weights).
+  * Measures generation throughput (from 21,918 tok/s on 0.5B to 1,409 tok/s on 7B) and layer-activation storage per sample (107 MB to 430 MB).
+* **Takeaway**: Guaranteed all models fit within a single 48 GB GPU without tensor parallelism or silent memory spilling.
+
+---
+
+### [Table 1 · Dataset Composition]results/tables/t1_dataset_composition.csv (`t1_dataset_composition.csv`)
+* **Purpose**: Formal definition of the 6-tier difficulty ladder spanning factual retrieval and multi-step reasoning.
+* **Key Contents**:
+  * **Retrieval Ladder**: `R1` (PopQA Top Quintile - common facts), `R2` (PopQA Bottom Quintile - rare facts), `R3` (SimpleQA - adversarial long-tail trivia).
+  * **Reasoning Ladder**: `C1` (GSM8K - grade school math), `C2` (MATH Levels 1–2 - algebra/geometry), `C3` (MATH Levels 4–5 - olympiad/calculus).
+  * Fixed split per tier: **1,000 questions** total $\rightarrow$ **600 Train / 200 Calibration / 200 Test**.
+* **Takeaway**: Establishes the controlled ladder manipulation that isolates retrieval vs. reasoning complexity.
+
+---
+
+### [Table 2 · Cell Commitment & The Ragged Grid]results/tables/t2_cell_commitment.csv (`t2_cell_commitment.csv`)
+* **Purpose**: Records the 100-question pilot accuracy gate enforcing the pre-registered **$25\% \le \text{Accuracy} \le 80\%$ band**.
+* **Key Contents**:
+  * **14 cells committed**; **16 cells pruned** due to floor effects ($<25\%$).
+  * `0.5B-Instruct` failed all 6 tiers ($0/6$).
+  * `R2` and `R3` failed across all models ($0\%\text{--}19\%$) due to pure parametric recall limits.
+  * Only `7B-Instruct` cleared `C3` ($29\%$).
+* **Takeaway**: Pruning floor/ceiling cells ensures downstream calibration metrics measure true metacognition rather than blind guessing.
+
+---
+
+### [Table 3 · Parse & Accuracy Summary]results/tables/t3_parse_and_accuracy.csv (`t3_parse_and_accuracy.csv`)
+* **Purpose**: Audits instruction-following and JSON/format extraction reliability across elicitation variants (Numeric, Bucket, Betting/Pass).
+* **Key Contents**:
+  * Instruct models achieved near-perfect parse rates ($93\%\text{--}100\%$).
+  * Base model (`7B-Base`) suffered lower extraction compliance on reasoning without few-shot formatting.
+* **Takeaway**: Confirms that answer extraction was not silently distorting ground-truth accuracy.
+
+---
+
+### [Table 4 · Grader Tier Usage]results/tables/t4_grader_tier_usage.csv (`t4_grader_tier_usage.csv`)
+* **Purpose**: An LLM-judge-free audit trail of how each model answer was graded.
+* **Key Contents**:
+  * **Entity / Short Answers (`R1–R3`)**: Graded via alias normalization and substring matching.
+  * **Numeric (`C1`)**: Graded via exact numerical equivalence.
+  * **LaTeX / Symbolic (`C2–C3`)**: Graded via SymPy symbolic algebra engine.
+* **Takeaway**: Guarantees deterministic, reproducible grading with zero variance from external LLM evaluators.
+
+---
+
+### [Table 5 · Verbal Format Agreement (H0 / Gate 2)]results/tables/t5_h0_format_agreement.csv (`t5_h0_format_agreement.csv`)
+* **Purpose**: Tests whether verbal confidence is a single coherent construct across Numeric (A), Bucket (B), and Forced Action/Betting (C).
+* **Key Contents**:
+  * Pairwise Spearman rank correlations:
+    * $\text{Format A vs. B}$: $\rho = 0.217$
+    * $\text{Format A vs. C}$: $\rho = -0.047$
+    * $\text{Format B vs. C}$: $\rho = 0.050$
+  * Fails the pre-registered Gate 2 pass rule ($\rho \ge 0.60$).
+* **Takeaway**: **Falsifies H0.** How a model verbalizes confidence is format-dependent; models hedge differently when betting vs. when stating a percentage.
+
+---
+
+### [Table 6 · Murphy Decomposition & Calibration (H1)]results/tables/t6_h1_murphy_decomposition.csv (`t6_h1_murphy_decomposition.csv`)
+* **Purpose**: Formal test of Hypothesis 1 comparing Expected Calibration Error (ECE), Brier scores, and Murphy components (Resolution vs. Reliability) across modalities.
+* **Key Contents**:
+  * **Verbalized**: $\text{ECE} = 0.028$ $[0.019, 0.058]$, $\text{Brier} = 0.217$, $\text{Resolution} = 0.025$.
+  * **Behavioral**: $\text{ECE} = 0.030$ $[0.025, 0.049]$, $\text{Brier} = 0.166$, $\text{Resolution} = 0.079$ (Highest resolution/sorting power).
+  * **Internal Probe**: $\text{ECE} = 0.040$ $[0.033, 0.061]$, $\text{Brier} = 0.207$, $\text{Resolution} = 0.040$.
+* **Takeaway**: **Falsifies H1** (confidence intervals overlap; verbal is not strictly worse calibrated than internal after post-hoc temperature scaling, though behavioral has superior resolution).
+
+---
+
+### [Table 7 · Probe Depth Sweep & Gate 3]results/tables/t7_probe_sweep.csv (`t7_probe_sweep.csv`)
+* **Purpose**: Master table for internal layer probes across 5 depth percentiles ($0\%, 25\%, 50\%, 75\%, 100\%$) evaluated against label-shuffle nulls and surface bag-of-words baselines.
+* **Key Contents**:
+  * Confirms Gate 3 validity ($\text{AUROC} \ge 0.65$ beating shuffle nulls) for all Instruct models.
+  * Captures the failure of `7B-Base` on reasoning ($\text{AUROC} \approx 0.50\text{--}0.58$).
+* **Takeaway**: Proves that internal activations carry genuine, decodable signal of correctness in instruct-tuned models.
+
+---
+
+### [Table 8 · Depth Onsets (H4)]results/tables/t8_h4_depth_onsets.csv (`t8_h4_depth_onsets.csv`)
+* **Purpose**: Tests whether reasoning confidence onsets later in network depth than factual retrieval.
+* **Key Contents**:
+  * Mean Onset for Retrieval: **$18.75\%$**
+  * Mean Onset for Reasoning: **$21.43\%$**
+  * Difference: $\Delta = +2.68\%$ $[95\%\text{ CI: } -8.04\%, +15.18\%]$.
+* **Takeaway**: **Falsifies H4.** Both task types emerge early ($\sim 25\%$ depth).
+
+---
+
+### [Table 9 · Pairwise Signal Correlations]results/tables/t9_signal_correlations.csv (`t9_signal_correlations.csv`)
+* **Purpose**: Quantifies rank alignment (Spearman $\rho$) between Verbal, Behavioral, and Internal confidence per cell.
+* **Key Contents**:
+  * **Retrieval (`R1`)**: Strong alignment between behavioral consistency and internal probe ($\rho = 0.62\text{--}0.72$).
+  * **Reasoning (`C1–C3`)**: Total decoupling of verbal confidence from internal activations ($\rho \rightarrow 0.04$ on C3).
+* **Takeaway**: Proves verbal confidence in hard math is ungrounded theater.
+
+---
+
+### [Table 10 · Omniscience Index]results/tables/t10_omniscience_index.csv (`t10_omniscience_index.csv`)
+* **Purpose**: Decision-theoretic evaluation of model betting under asymmetric payoffs ($+1$ for correct, $-1$ for wrong, $0$ for pass).
+* **Key Contents**:
+  * `1.5B-Instruct` on Math achieves positive utility ($+9.7$ on C1, $+15.0$ on C2) by heavily abstaining.
+  * `3B` and `7B` models score negative utility ($-25$ to $-64$) because they refuse to pass and incur severe penalties on wrong guesses.
+* **Takeaway**: Demonstrates that smaller models avoid overconfidence penalties by hedging, whereas larger models suffer from destructive optimism.
+
+---
+
+### [Table 11 · Abstention Breakdown]results/tables/t11_abstention_split.csv(`t11_abstention_split.csv`)
+* **Purpose**: Deconstructs model passes into **Justified Hedges** (would have failed) vs. **Missed Knowledge** (cowardly passes on questions it could solve).
+* **Key Contents**:
+  * `1.5B-Instruct` has a high missed knowledge rate on math ($49.6\%$ on C1, $47.3\%$ on C2).
+  * `7B-Instruct` on adversarial trivia (`R3`) achieves a near-perfect justified hedge rate ($47$ justified passes out of $48$, missed knowledge rate $= 2.1\%$).
+* **Takeaway**: Proves that 1.5B is genuinely "cowardly" on math, while 7B shows calibrated metacognitive hedging on impossible retrieval.
+
+---
+
+### [Table 12 · Per-Question Signals Master Table]results/tables/t12_per_question_signals.csv(`t12_per_question_signals.csv`)
+* **Purpose**: The master dataset containing raw question text, gold answers, model outputs, correctness labels, and raw/calibrated scores for all 3 signals.
+* **Key Contents**:
+  * 2.2 MB structured CSV covering every test split evaluation point.
+* **Takeaway**: Serves as the complete data appendix for third-party auditing and replication.
+
+---
+
+### [Table 13 · Semantic Entropy Clustering]results/tables/t13_semantic_entropy.csv (`t13_semantic_entropy.csv`)
+* **Purpose**: Stores semantic clustering metrics across $N=10$ temperature-sampled generations per question.
+* **Key Contents**:
+  * Records discrete semantic cluster counts, cluster probability entropy, and lexical token variances.
+* **Takeaway**: The underlying computational basis for the Behavioral Confidence signal ($S_{\text{behavioral}}$).
+
+---
+
+### [Table 15 · Hypothesis Verdicts Summary]results/tables/t15_hypothesis_verdicts.csv (`t15_hypothesis_verdicts.csv`)
+* **Purpose**: Top-level executive scorecard recording the formal verdicts on all pre-registered hypotheses.
+* **Key Contents**:
+  * **H0 (Gate 2)**: **Falsified** (Formats A/B/C disagree; $\rho < 0.60$).
+  * **H1**: **Falsified** (Calibrated ECE intervals overlap).
+  * **H2 (Gate 1)**: **Supported** (Hopeful/Suppressed quadrants cluster by question features).
+  * **H3 (Gate 4)**: **Falsified** (Instruction tuning increases hopeful confidence instead of lowering it).
+  * **H4 (Gate 3)**: **Falsified** (Retrieval and reasoning depth curves overlap at $\sim 25\%$).
+* **Takeaway**: Provides an honest, pre-registered accounting of which theoretical predictions held and which were refuted by the empirical data.
+
+# Understanding Derived
+
+## 1. Pre-Registered Hypothesis Testing
+
+### [`h0_gate2.json`](results/derived/h0_gate2.json) — Format Invariance (Gate 2 / H0)
+* **What it stores**: Pairwise Spearman rank correlations between the three verbal elicitation formats: **A** (Numeric 0–100%), **B** (Verbal Buckets), and **C** (Forced Action / Betting).
+* **Key Finding**: Pairwise correlations are low ($\rho = -0.05 \text{ to } +0.22$, failing the $\ge 0.60$ gate threshold). **H0 is falsified**; verbalized confidence is format-dependent. Format B (Buckets) is selected as canonical due to lowest ECE.
+
+---
+
+### [`h1_calibration.json`](results/derived/h1_calibration.json) — Murphy Decomposition & Calibration (H1)
+* **What it stores**: Expected Calibration Error (ECE), Brier scores, and 3-way Murphy decomposition ($\text{Brier} = \text{Reliability} - \text{Resolution} + \text{Uncertainty}$) on the held-out test split.
+* **Key Finding**: **H1 is falsified** because post-calibration ECE confidence intervals overlap between Verbal ($0.028$), Behavioral ($0.030$), and Internal ($0.040$). However, **Behavioral confidence achieves double the Resolution ($0.079$)**, meaning it sorts correct from incorrect answers far more decisively.
+
+---
+
+### [`h2_quadrants.json`](results/derived/h2_quadrants.json) & [`quadrants.parquet`](results/derived/quadrants.parquet) — Metacognitive Discordance (H2)
+* **What it stores**: Classification of every test sample into 4 quadrants based on Verbal vs. Internal alignment at threshold 0.50:
+  1. **Agree High** ($N=269$): High verbal, high probe (true knowledge).
+  2. **Agree Low** ($N=537$): Low verbal, low probe (known unknowns).
+  3. **Hopeful** ($N=224$): High verbal, low probe (delusional optimism / bluffing).
+  4. **Suppressed** ($N=169$): Low verbal, high probe (cowardly hedging / tacit knowledge).
+* **Key Finding**: **H2 is supported** ($\chi^2 = 49.6, p < 10^{-10}$). Question length, syntactic complexity, and formula count significantly predict whether a question falls into the "Hopeful" or "Suppressed" quadrant.
+
+---
+
+### [`h3_model_delta.json`](results/derived/h3_model_delta.json) — Base vs. Instruct Delta (H3 / Gate 4)
+* **What it stores**: Matched-pair difference in Hopeful Confidence rate between `qwen2.5-7b-base` and `qwen2.5-7b-instruct`.
+* **Key Finding**: **H3 is falsified in the reverse direction**. Instead of instruction tuning reducing hopeful bluffing, **Hopeful rate increased from $0.0\%$ (Base) $\rightarrow 23.8\%$ (Instruct)** ($\Delta = -23.8\%$, 95% CI $[-27.2\%, -20.5\%]$). Instruction tuning teaches models to sound confident even when internal activations are absent.
+
+---
+
+### [`h4_depth.json`](results/derived/h4_depth.json) & [`h4_onsets.parquet`](results/derived/h4_onsets.parquet) — Depth-Wise Emergence (H4)
+* **What it stores**: Layer depth onset percentiles (first layer reaching probe $\text{AUROC} \ge 0.65$) for Retrieval vs. Reasoning across scales.
+* **Key Finding**: **H4 is falsified**. Mean onset for Retrieval is $18.75\%$ vs. $21.43\%$ for Reasoning ($\Delta = +2.68\%$, 95% CI $[-8.04\%, +15.18\%]$). Correctness signals emerge early ($\sim 25\%$ depth) regardless of task type or model size.
+
+---
+
+## 2. Verification, Auditing & Regression Models
+
+### [`gate3.json`](results/derived/gate3.json) — Linear Probe Sanity Gate
+* **What it stores**: Layer-by-layer activation tensor health checks (`nonfinite_frac = 0.0`), peak layer AUROC, and verification that probes beat label-shuffle nulls and surface bag-of-words baselines.
+* **Key Finding**: All Instruct models passed Gate 3 cleanly. `7B-Base` on reasoning failed with diagnosis: *"clean activations, no signal"* ($\text{AUROC} \approx 0.50\text{--}0.58$).
+
+---
+
+### [`judge_agreement.json`](results/derived/judge_agreement.json) & [`judge.parquet`](results/derived/judge.parquet) — Gate 1 Grading Audit
+* **What it stores**: Agreement between the deterministic grading pipeline (SymPy, alias matching, NLI) and an independent LLM-judge (`Qwen2.5-32B-Instruct`) on $N=2{,}560$ answers.
+* **Key Finding**: **$98.44\%$ overall agreement** (exceeding the $95\%$ Gate 1 threshold). Confirms deterministic automated grading is highly reliable.
+
+---
+
+### [`hierarchical_regression.json`](results/derived/hierarchical_regression.json) — Pooled Mixed-Effects Model
+* **What it stores**: A single Bayesian Binomial Mixed GLM predicting question correctness from all three confidence signals simultaneously with question-level random effects:
+  $$\text{logit}(P(\text{correct})) \sim S_{\text{verbal}} + S_{\text{behavioral}} + S_{\text{internal}} + \text{Task} + \text{Scale}$$
+* **Key Finding**: **Behavioral confidence has the largest unique coefficient ($\beta = 4.83, \text{SD} = 0.16$)**, followed by Verbal ($\beta = 1.35$), while Internal probe adds $\beta = 0.51$.
+
+---
+
+## 3. Calibration & Behavioral Extraction Data
+
+### [`cell_commitments.json`](results/derived/cell_commitments.json) — Ragged Grid Gate Decisions
+* **What it stores**: Exact pilot accuracy, parse rate, and inclusion verdicts for all 30 $(model \times tier)$ cells against the $25\% \le \text{Acc} \le 80\%$ band.
+* **Key Finding**: 14 cells committed, 16 cells pruned.
+
+---
+
+### [`bucket_mapping.json`](results/derived/bucket_mapping.json) — Empirical Verbal Bucket Calibration
+* **What it stores**: Empirical ground-truth accuracy mapped to each verbal confidence bucket (`CERTAIN`, `FAIRLY_CONFIDENT`, `SOMEWHAT_UNSURE`, `MOSTLY_GUESSING`, `NO_IDEA`) per cell on the calibration split.
+* **Key Finding**: Prevents arbitrary hardcoded numbers; `CERTAIN` on hard math often corresponds to only $\approx 50\%\text{--}66\%$ empirical accuracy.
+
+---
+
+### [`calibration_meta.json`](results/derived/calibration_meta.json) — Temperature & Scaling Parameters
+* **What it stores**: Calibration fitting metadata (Isotonic regression and Platt scaling parameters) for all three modalities across calibration splits.
+
+---
+
+### [`abstention_split.json`](results/derived/abstention_split.json) & [`abstention_split.parquet`](results/derived/abstention_split.parquet) — Hedging Analysis
+* **What it stores**: Item-level breakdown of Format C passes into **Justified Hedges** (avoided an error) vs. **Missed Knowledge** (unnecessarily passed on a question the model knew).
+
+---
+
+### [`omniscience_index.parquet`](results/derived/omniscience_index.parquet) — Decision Utility
+* **What it stores**: Expected decision-theoretic payoff per cell under asymmetric betting payoffs ($+1$ right, $-1$ wrong, $0$ pass).
+
+---
+
+## 4. Master Pipeline Datasets (Parquet Stores)
+
+* **[`signals.parquet`](results/derived/signals.parquet)**: Compiled master table containing normalized, raw, and calibrated scores for all 3 signals ($S_{\text{verbal}}, S_{\text{behavioral}}, S_{\text{internal}}$) on test questions.
+* **[`entropy.parquet`](results/derived/entropy.parquet) & [`entropy_sanity.json`](results/derived/entropy_sanity.json)**: Semantic clustering metrics, unique cluster counts, and semantic entropy across 10 temperature rollouts per item.
+* **[`graded.parquet`](results/derived/graded.parquet)**: Full generation transcripts, extracted answers, and deterministic grading verdicts for thousands of items.
+* **[`probe_sweep.parquet`](results/derived/probe_sweep.parquet)**: Complete row-level dataset of the 5-percentile linear probe sweep across all layers and splits.
+* **[`correlations.parquet`](results/derived/correlations.parquet)**: Raw and calibrated pairwise Spearman correlation coefficients between all modalities.
+* **[`compute_ledger.parquet`](results/derived/compute_ledger.parquet)**: Wall-clock GPU execution seconds, output token counts, and generation throughput measured live during pipeline execution.
+
+# Manual review of questions.
+---
+###### NOTE : "A known limitation of automatically templated entity benchmarks (such as PopQA) is relation inversion ambiguity—e.g., querying single historical capitals for entities with multiple historical sovereigns. However, our 3-way calibration framework specifically evaluates whether models can detect such latent epistemic ambiguity through increased semantic entropy and abstention."
+###### "Benchmark Ground-Truth Limitations: Open-domain retrieval benchmarks (PopQA/Wikidata) suffer from 4 systematic noise archetypes: (1) Homonym collisions ('Queen' $\rightarrow$ Amit Trivedi vs. Freddie Mercury), (2) Multi-attribute occupations (Tyler $\rightarrow$ producer vs. rapper), (3) Granularity mismatches (Lincoln $\rightarrow$ Baptist vs. Christian), and (4) Inverted 1-to-many historical relations (Delhi $\rightarrow$ Tughlaq vs. India). This noise demonstrates why raw surface accuracy is brittle, and why semantic entropy and calibrated abstention are superior measures of LLM metacognition."
+---
