@@ -94,6 +94,12 @@ warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 HAS_MATH_VERIFY = importlib.util.find_spec("math_verify") is not None
+try:
+    from sympy.parsing.sympy_parser import parse_expr as sym_parse_expr
+    SYMPY_OK = True
+except Exception:                                          # pragma: no cover
+    sym_parse_expr = None
+    SYMPY_OK = False
 
 
 def detect_platform() -> str:
@@ -154,6 +160,363 @@ for _g in DEVICES["gpus"]:
     print(f"  [{_g['index']}] {_g['name']}  {_g['vram_gb']} GB  sm_{_g['capability'].replace('.', '')}")
 print(f"bf16 native   : {DEVICES['bf16']}")
 print(f"math_verify   : {HAS_MATH_VERIFY}")
+
+# %%
+# ============================================================================
+# CELL 1b — session environment: secrets + run identity (ENV ONLY)
+#
+# Set these HERE so they exist before any Hub download or provenance stamp.
+# Values stay on the molab/kaggle machine — NEVER commit them to the repo.
+# ============================================================================
+
+# HuggingFace token (Read scope is enough): faster downloads and access to
+# gated repos like the Qwen family. Paste between the quotes; leave empty to
+# skip (public repos still work, rate-limited).
+_HF_TOKEN = ""
+if _HF_TOKEN:
+    os.environ["HF_TOKEN"] = _HF_TOKEN
+del _HF_TOKEN
+
+# Binds every artifact to a version label when no .git exists on the platform
+# (audit fix for code_sha="nogit"). Change per release, e.g. a git sha.
+os.environ.setdefault("CODE_SHA", "v3-qwen35-audit-fixes")
+
+# Optimized linear-attention kernels for the Qwen 3.5 hybrid layers
+# (flash-linear-attention + causal-conv1d). Speed-only: identical results
+# either way. Installed BEST-EFFORT and SEPARATELY — flash-linear-attention
+# is pure Python/Triton and effectively always succeeds, while causal-conv1d
+# usually has no prebuilt wheel for the session's torch/CUDA/Python combo.
+#
+# For causal-conv1d the fallback chain is:
+#   1. plain pip install (hits GitHub prebuilt wheels when one exists)
+#   2. source build against a PIP-PROVIDED CUDA toolchain: Molab images ship
+#      no nvcc, and upstream setup.py then dies on an unbound
+#      `bare_metal_version`. NVIDIA publishes nvcc + headers on PyPI
+#      (nvidia-cuda-nvcc / -runtime / -cccl), so we assemble CUDA_HOME from
+#      them and retry with --no-build-isolation.
+# Set INSTALL_LINEAR_ATTN_KERNELS=0 to skip entirely.
+
+def _kernel_importable(mod_name):
+    """True only if the module IMPORTS cleanly — a half-built extension that
+    is findable but crashes on import must not count as installed."""
+    try:
+        importlib.import_module(mod_name)
+        return True
+    except Exception:                                      # noqa: BLE001
+        return False
+
+
+def _pip_show_location(pkg_name):
+    """Exact site-packages dir pip installed <pkg_name> into, via
+    `pip show`. Needed because `import nvidia` is a NAMESPACE package whose
+    first __path__ entry may be torch's bundled nvidia/ libs — probing only
+    that masked the freshly-installed toolchain (v3 bug)."""
+    try:
+        _r = subprocess.run([sys.executable, "-m", "pip", "show", pkg_name],
+                            capture_output=True, text=True, timeout=120)
+        if _r.returncode != 0:
+            return None
+        import re as _re
+        _m = _re.search(r"^Location:\s*(.+)$", _r.stdout, _re.M)
+        return Path(_m.group(1).strip()) if _m else None
+    except Exception:                                      # noqa: BLE001
+        return None
+
+
+if os.environ.get("INSTALL_LINEAR_ATTN_KERNELS", "1") != "0":
+    if not _kernel_importable("fla"):
+        print("[cell1b] installing flash-linear-attention ...")
+        try:
+            _r = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-q", "--no-input",
+                 "flash-linear-attention"],
+                capture_output=True, text=True, timeout=600)
+            print("[cell1b] flash-linear-attention: "
+                  + ("installed" if _r.returncode == 0 else
+                     "FAILED:\n" + (_r.stderr or _r.stdout or "")[-400:]))
+        except Exception as _e:                            # noqa: BLE001
+            print(f"[cell1b] flash-linear-attention install failed ({_e})")
+
+    if not _kernel_importable("causal_conv1d"):
+        # Attempt 0 — reuse a wheel built by an EARLIER session (cached next
+        # to the notebook): seconds instead of another toolchain compile.
+        _cc1d_env = os.environ.copy()
+        for _whl in sorted(Path.cwd().glob("causal_conv1d-*.whl"), reverse=True):
+            print(f"[cell1b] trying cached wheel {_whl.name} ...")
+            try:
+                _r = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "-q", "--no-input",
+                     "--force-reinstall", "--no-deps", str(_whl)],
+                    capture_output=True, text=True, timeout=600, env=_cc1d_env)
+            except Exception as _e:                        # noqa: BLE001
+                print(f"[cell1b] cached-wheel install failed ({_e})")
+                continue
+            if _r.returncode == 0 and _kernel_importable("causal_conv1d"):
+                print("[cell1b] causal-conv1d: restored from cached wheel")
+                break
+            print(f"[cell1b] cached wheel unusable ({_whl.name})")
+
+    if not _kernel_importable("causal_conv1d"):
+        print("[cell1b] installing causal-conv1d (prebuilt wheel or source) ...")
+        _cc1d_env = os.environ.copy()
+        try:
+            _r = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-q", "--no-input",
+                 "causal-conv1d"],
+                capture_output=True, text=True, timeout=900, env=_cc1d_env)
+            _ok = _r.returncode == 0
+            print("[cell1b] causal-conv1d (wheel): "
+                  + ("installed" if _ok else
+                     "no matching prebuilt wheel\n" + (_r.stderr or "")[-200:]))
+        except Exception as _e:                            # noqa: BLE001
+            _ok = False
+            print(f"[cell1b] causal-conv1d wheel attempt failed ({_e})")
+
+        if not _ok:
+            # ---- causal-conv1d source build, best-effort -----------------
+            # Attempt order (every failure is non-fatal -> slow path):
+            #   a) SYSTEM toolkit (/usr/local/cuda*, /opt/cuda*) — exact match,
+            #      zero download;
+            #   b) pip toolchain PINNED to torch.version.cuda (nvcc-latest vs
+            #      torch-cu13.0 header skew caused a real compile failure);
+            #   c) pip toolchain unpinned.
+            # NVIDIA wheels >=13.x unpack to one versioned root
+            # nvidia/cu13/{bin/nvcc,include/,lib/}; older ones used
+            # nvidia/cuda_nvcc. `import nvidia` is a namespace package that may
+            # lead with torch's bundled libs, so roots come from `pip show`
+            # plus every site-packages dir — never __path__[0] alone.
+            def _nvidia_roots():
+                """Every candidate nvidia/ root: pip-show locations for the
+                toolchain packages, all site-packages dirs, and the namespace
+                package paths. `import nvidia` alone is NOT enough — its first
+                __path__ entry can be torch's bundled lib-only tree."""
+                _roots = []
+                for _pkg in ("nvidia-cuda-nvcc", "nvidia-cuda-runtime"):
+                    _loc = _pip_show_location(_pkg)
+                    if _loc is not None:
+                        _roots.append(Path(_loc) / "nvidia")
+                try:
+                    import site as _site_mod
+                    for _sp in list(_site_mod.getsitepackages()) + \
+                            [_site_mod.getusersitepackages()]:
+                        _cand = Path(_sp) / "nvidia"
+                        if _cand.is_dir():
+                            _roots.append(_cand)
+                    for _p in Path(importlib.import_module("nvidia").__path__):
+                        _roots.append(Path(_p))
+                except Exception:                          # noqa: BLE001
+                    pass
+                _seen, _out = set(), []
+                for _r in _roots:
+                    if str(_r) in _seen:
+                        continue
+                    _seen.add(str(_r))
+                    if _r.is_dir():
+                        _out.append(_r)
+                return _out
+
+            def _find_nvcc():
+                for _rt in _nvidia_roots():
+                    for _cand in sorted(_rt.glob("cu1*")) + [_rt / "cuda_nvcc", _rt]:
+                        if (_cand / "bin" / "nvcc").is_file():
+                            return _cand
+                return None
+
+            def _nvcc_banner(home):
+                _v = subprocess.run([str(home / "bin" / "nvcc"), "-V"],
+                                    capture_output=True, text=True, timeout=120)
+                if _v.returncode != 0:
+                    print("[cell1b] nvcc probe failed:\n" + (_v.stderr or "")[-300:])
+                    return False
+                print("[cell1b] " + "\n[cell1b] ".join(
+                    ln for ln in _v.stdout.strip().splitlines() if ln.strip()))
+                return True
+
+            def _prep_home(home):
+                """Make CUDA_HOME self-sufficient: exec bits on bin/, and merge
+                headers + libcudart from EVERY nvidia root — the pinned nvcc
+                root can differ from where torch's matching 13.0.x runtime
+                headers live, and missing/mismatched headers were a prime
+                compile-failure suspect. Also provides lib64/ for the linker."""
+                for _b in (home / "bin").glob("*"):
+                    try:
+                        _b.chmod(_b.stat().st_mode | 0o111)
+                    except OSError:
+                        pass
+                _inc = home / "include"
+                _lib64 = home / "lib64"
+                _inc.mkdir(parents=True, exist_ok=True)
+                _lib64.mkdir(parents=True, exist_ok=True)
+                for _rt in _nvidia_roots():
+                    for _base in [_rt] + sorted(_rt.glob("cu1*")) + [_rt / "cuda_nvcc"]:
+                        _src_inc = _base / "include"
+                        if _src_inc.is_dir() and _src_inc.resolve() != _inc.resolve():
+                            for _f in _src_inc.rglob("*"):
+                                if _f.is_file():
+                                    _dst = _inc / _f.relative_to(_src_inc)
+                                    _dst.parent.mkdir(parents=True, exist_ok=True)
+                                    shutil.copy2(_f, _dst)
+                        for _ld in ("lib", "lib64"):
+                            _d = _base / _ld
+                            if _d.is_dir():
+                                for _so in _d.glob("libcudart*.so*"):
+                                    shutil.copy2(_so, _lib64 / _so.name)
+
+            def _attempt_build(home):
+                """Build via setup.py bdist_wheel DIRECTLY: pip -q suppresses
+                ninja/nvcc output and torch's failure wrapper cannot surface
+                it ("no good way to get it here") — which is exactly why the
+                earlier failures showed no compiler diagnostics. Running the
+                build ourselves streams every nvcc line into our capture, and
+                the produced wheel is cached beside the notebook for instant
+                reuse in later sessions."""
+                if not _nvcc_banner(home):
+                    return False
+                _env = os.environ.copy()
+                _env["CUDA_HOME"] = str(home)
+                _env["PATH"] = str(home / "bin") + os.pathsep + _env.get("PATH", "")
+                _env.setdefault("TORCH_CUDA_ARCH_LIST",
+                                "7.5;8.0;8.6;9.0;10.0+PTX;12.0")
+                _env["MAX_JOBS"] = "2"     # RAM-hungry nvcc jobs; OOM-kill
+                                           # masquerades as 'compile error'
+                import tempfile
+                _work = Path(tempfile.mkdtemp(prefix="cc1d_build_"))
+                _streams = {"out": [], "err": []}
+
+                def _run(cmd, timeout, cwd=None):
+                    _r = subprocess.run(cmd, capture_output=True, text=True,
+                                        timeout=timeout, cwd=cwd, env=_env)
+                    _streams["out"].append(_r.stdout or "")
+                    _streams["err"].append(_r.stderr or "")
+                    return _r
+
+                def _flush_log():
+                    Path("causal_conv1d_build.log").write_text(
+                        "=== STDOUT ===\n" + "\n".join(_streams["out"])
+                        + "\n\n=== STDERR ===\n" + "\n".join(_streams["err"]),
+                        encoding="utf-8")
+
+                def _diagnose():
+                    _lines = ("\n".join(_streams["out"])
+                              + "\n--- stderr ---\n"
+                              + "\n".join(_streams["err"])).splitlines()
+                    _hits = []
+                    for _i, _l in enumerate(_lines):
+                        if re.search(r"\b(error|FAILED|fatal)\b", _l, re.I):
+                            _hits.extend(_lines[_i:_i + 4])
+                            _hits.append("")
+                    print("[cell1b] --- detected diagnostics ---\n"
+                          + ("\n".join(_hits)[-3000:]
+                             or "(no error lines matched; see full log)"))
+
+                try:
+                    _r = _run([sys.executable, "-m", "pip", "download",
+                               "causal-conv1d", "--no-deps",
+                               "--no-binary", "causal-conv1d",
+                               "-d", str(_work)], 600)
+                    if _r.returncode != 0:
+                        print("[cell1b] sdist download failed:\n"
+                              + (_r.stderr or "")[-400:])
+                        return False
+                    _sdist = next(_work.glob("causal_conv1d-*.tar.gz"))
+                    shutil.unpack_archive(_sdist, _work)
+                    _src = next(d for d in _work.iterdir() if d.is_dir())
+                    print("[cell1b] compiling via setup.py bdist_wheel "
+                          "(compiler output fully captured) ...")
+                    _r = _run([sys.executable, "setup.py", "bdist_wheel"],
+                              2700, cwd=_src)
+                    if _r.returncode != 0:
+                        _flush_log()
+                        print("[cell1b] BUILD FAILED — "
+                              "full log -> causal_conv1d_build.log")
+                        _diagnose()
+                        return False
+                    _whls = list((_src / "dist").glob("*.whl"))
+                    if not _whls:
+                        print("[cell1b] build finished but no wheel produced")
+                        return False
+                    _cache = Path.cwd() / _whls[0].name
+                    shutil.copy2(_whls[0], _cache)
+                    print(f"[cell1b] wheel cached for future sessions: {_cache.name}")
+                    _r = _run([sys.executable, "-m", "pip", "install", "-q",
+                               "--no-input", "--force-reinstall", "--no-deps",
+                               str(_cache)], 600)
+                    if _r.returncode != 0:
+                        print("[cell1b] wheel install failed:\n"
+                              + (_r.stderr or "")[-400:])
+                        return False
+                    if not _kernel_importable("causal_conv1d"):
+                        print("[cell1b] built wheel does not import cleanly")
+                        return False
+                    print("[cell1b] causal-conv1d: built, cached, imported OK")
+                    return True
+                except Exception as _e:                    # noqa: BLE001
+                    _flush_log()
+                    print(f"[cell1b] direct build failed ({_e})")
+                    _diagnose()
+                    return False
+
+            _built = False
+            _sys_dirs = [Path("/usr/local/cuda"), Path("/opt/cuda")] + \
+                sorted(Path("/usr/local").glob("cuda-*")) + \
+                sorted(Path("/usr/local").glob("cuda")) + \
+                sorted(Path("/opt").glob("cuda-*"))
+            for _d in _sys_dirs:
+                if (_d / "bin" / "nvcc").is_file() and _nvcc_banner(_d):
+                    print(f"[cell1b] using SYSTEM toolkit at {_d}")
+                    _prep_home(_d)
+                    _built = _attempt_build(_d)
+                    break
+
+            if not _built:
+                _tcv = None
+                try:
+                    _tcv = str(torch.version.cuda)         # e.g. '13.0'
+                except Exception:                          # noqa: BLE001
+                    pass
+                _tool_sets = []
+                if _tcv:
+                    _tool_sets.append([f"nvidia-cuda-nvcc=={_tcv}.*",
+                                       "ninja", "wheel"])
+                _tool_sets.append(["nvidia-cuda-nvcc", "nvidia-cuda-runtime",
+                                   "nvidia-cuda-cccl",
+                                   "nvidia-cuda-profiler-api", "ninja", "wheel"])
+                for _pkgs in _tool_sets:
+                    _tag = ("version-pinned to torch cu" + _tcv
+                            if any("==" in p for p in _pkgs[:1]) else "unpinned latest")
+                    print(f"[cell1b] installing pip CUDA toolchain ({_tag}) ...")
+                    try:
+                        _r = subprocess.run(
+                            [sys.executable, "-m", "pip", "install", "-q",
+                             "--no-input", *_pkgs],
+                            capture_output=True, text=True, timeout=900)
+                        if _r.returncode != 0:
+                            print("[cell1b] toolchain install failed:\n"
+                                  + (_r.stderr or _r.stdout or "")[-300:])
+                            continue
+                    except Exception as _e:                # noqa: BLE001
+                        print(f"[cell1b] toolchain install failed ({_e})")
+                        continue
+                    _home = _find_nvcc()
+                    if _home is None:
+                        print("[cell1b] toolchain installed but nvcc not located")
+                        continue
+                    _prep_home(_home)
+                    if not _nvcc_banner(_home):
+                        continue
+                    _built = _attempt_build(_home)
+                    if _built:
+                        break
+            if not _built:
+                print("[cell1b] continuing on the slower torch path; "
+                      "results are unaffected")
+
+# Recorded AFTER all attempts: both | fla_only | none.
+_state = ("both" if _kernel_importable("fla") and _kernel_importable("causal_conv1d")
+          else "fla_only" if _kernel_importable("fla") else "none")
+os.environ["LINEAR_ATTN_KERNELS"] = _state
+print(f"[cell1b] linear_attn_kernels={_state}")
+
 
 # %%
 # ============================================================================
@@ -243,27 +606,43 @@ TIER_FALLBACKS: dict[str, list[tuple[str, str | None, str]]] = {
 }
 
 # --------------------------------------------------------------- models ----
-# PLAN §9. `layers` is the transformer block count; percentile→layer index uses
-# it directly (index 0 = embedding output, index L = final block output).
+# PLAN §9. `layers` is the TEXT decoder block count; percentile→layer index
+# uses it directly (index 0 = embedding output, index L = final block).
+#
+# Qwen 3.5 family ladder — replaces the Qwen 2.5 grid (audit resolution:
+# stronger models raise accuracy on the hardest tiers R3/C2/C3, so more of
+# each dataset survives parsing/accuracy floors and contributes rows).
+#
+# VERIFIED against each checkpoint's config.json on the HF Hub (plain name =
+# instruct/chat model, "-Base" suffix = base model; there are no "-Instruct"
+# repos in this family):
+#   Qwen3.5-0.8B      layers=24 hidden=1024
+#   Qwen3.5-2B        layers=24 hidden=2048
+#   Qwen3.5-4B        layers=32 hidden=2560
+#   Qwen3.5-9B(-Base) layers=32 hidden=4096
+# All five are Qwen3_5ForConditionalGeneration (multimodal wrapper, hybrid
+# linear/full attention every 4th layer) — the pipeline resolves the text
+# stack via text_stack() and re-verifies these numbers at runtime
+# (verify_model_specs), so a config drift can never silently mis-tap layers.
 MODEL_SPECS: dict[str, dict] = {
-    "qwen2.5-0.5b-instruct": dict(
-        hf_id="Qwen/Qwen2.5-0.5B-Instruct", params_b=0.49, layers=24, hidden=896,
+    "qwen3.5-0.8b-instruct": dict(
+        hf_id="Qwen/Qwen3.5-0.8B", params_b=0.8, layers=24, hidden=1024,
         chat=True, rung="ladder",
     ),
-    "qwen2.5-1.5b-instruct": dict(
-        hf_id="Qwen/Qwen2.5-1.5B-Instruct", params_b=1.54, layers=28, hidden=1536,
+    "qwen3.5-2b-instruct": dict(
+        hf_id="Qwen/Qwen3.5-2B", params_b=2.0, layers=24, hidden=2048,
         chat=True, rung="ladder",
     ),
-    "qwen2.5-3b-instruct": dict(
-        hf_id="Qwen/Qwen2.5-3B-Instruct", params_b=3.09, layers=36, hidden=2048,
+    "qwen3.5-4b-instruct": dict(
+        hf_id="Qwen/Qwen3.5-4B", params_b=4.0, layers=32, hidden=2560,
         chat=True, rung="ladder",
     ),
-    "qwen2.5-7b-instruct": dict(
-        hf_id="Qwen/Qwen2.5-7B-Instruct", params_b=7.62, layers=28, hidden=3584,
+    "qwen3.5-9b-instruct": dict(
+        hf_id="Qwen/Qwen3.5-9B", params_b=9.0, layers=32, hidden=4096,
         chat=True, rung="ladder",
     ),
-    "qwen2.5-7b-base": dict(
-        hf_id="Qwen/Qwen2.5-7B", params_b=7.62, layers=28, hidden=3584,
+    "qwen3.5-9b-base": dict(
+        hf_id="Qwen/Qwen3.5-9B-Base", params_b=9.0, layers=32, hidden=4096,
         chat=False, rung="h3-comparison",
     ),
 }
@@ -277,7 +656,7 @@ MODEL_SPECS: dict[str, dict] = {
 @dataclass
 class Config:
     # ---------------------------------------------------------- identity --
-    RUN_NAME: str = "full1000"
+    RUN_NAME: str = "v35_full1000"      # v3 audit fixes + Qwen 3.5 ladder
     SEED: int = 20260813
     NOTES: str = "pre-registered run per PLAN.md v3"
 
@@ -331,6 +710,9 @@ class Config:
     SAMPLE_TEMPERATURE: float = 0.8     # PLAN §5: must be in 0.7–1.0
     SAMPLE_TOP_P: float = 0.95
     N_SAMPLES: int = 10                 # PLAN §5 N=10
+    SAMPLE_SEQ_LOGPROBS: bool = True    # record per-sample sequence log-probs
+                                        # (audit fix 3a: Rao-Blackwellized
+                                        # semantic-entropy masses)
     N_FEWSHOT_BASE: int = 4             # few-shot exemplars for the base model
     STOP_ON_DOUBLE_NEWLINE: bool = False
 
@@ -357,13 +739,26 @@ class Config:
 
     # ------------------------------------------------------- probe (§6) ---
     PERCENTILES: tuple[int, ...] = (0, 25, 50, 75, 100)
-    PROBE_LABEL: str = "correct"        # correct | entropy  (PLAN §6·5)
+    # PROBE_LABEL="entropy" closes audit finding 4: Signal 3 must test whether
+    # prompt-boundary activations predict multi-sample behavioral dispersion,
+    # not supervised correctness. Ground-truth correctness enters only later,
+    # as an external downstream benchmark on held-out data.
+    PROBE_LABEL: str = "entropy"        # entropy (unsupervised) | correct (reference)
     PROBE_C_GRID: tuple[float, ...] = (0.01, 0.1, 1.0, 10.0)
+    P0_NEG_CONTROL_TOL: float = 0.10    # |AUROC(p0) - 0.50| tolerance for the
+                                        # constant-token negative control
     PROBE_MAX_ITER: int = 2000
     PROBE_STORE_DTYPE: str = "float32"  # PLAN §16 standing risk 1
     AUROC_GATE: float = 0.65            # Gate 3
     LABEL_SHUFFLE_REPEATS: int = 20     # null distribution size
     SURFACE_BASELINE: bool = True       # TF-IDF prompt-only control (PLAN §14.1)
+
+    # ------------------------------------------------------- entropy ------
+    # Audit fix 3c: a question with only k parsed samples must not default to
+    # maximum behavioral confidence. Entropy is normalized against the TOTAL
+    # requested sample count N, and questions with fewer than ENTROPY_MIN_VALID
+    # valid parses get confidence NaN instead of a spuriously confident score.
+    ENTROPY_MIN_VALID: int = 8          # of N_SAMPLES=10
 
     # ------------------------------------------------------- grading -----
     NUMERIC_TOLERANCE: float = 1e-6
@@ -451,7 +846,7 @@ CFG = replace(
     _BASE_CFG,
     RUN_NAME="smoke", N_PILOT=5, N_PER_CELL=5, N_AGREEMENT=5, N_MANUAL_CHECK=5,
     N_SAMPLES=3, N_BOOTSTRAP=200,
-    ONLY_MODELS=("qwen2.5-0.5b-instruct", "qwen2.5-1.5b-instruct"),
+    ONLY_MODELS=("qwen3.5-0.8b-instruct", "qwen3.5-2b-instruct"),
     COMMIT_CELLS_OUTSIDE_BAND=True,
 ) if SMOKE else _BASE_CFG
 
@@ -462,13 +857,14 @@ CFG = replace(
 # CFG = replace(CFG, RUN_NAME="h0_only",
 #               STAGES=("data", "verbal", "grade", "stats", "figures", "tables", "report"))
 #
-# Session 1 of 2 — small models, leave the 7B pair for session 2:
-# CFG = replace(CFG, RUN_NAME="s1", SKIP_MODELS=("qwen2.5-7b-instruct", "qwen2.5-7b-base"),
+# Session 1 of 2 — small models, leave the 9B pair for session 2:
+# CFG = replace(CFG, RUN_NAME="s1", SKIP_MODELS=("qwen3.5-9b-instruct", "qwen3.5-9b-base"),
 #               MODEL_EXEC="concurrent", MAX_CONCURRENT_MODELS=3)
 #
-# Session 2 of 2 — the 7B pair only (resumes shared question bank):
+# Session 2 of 2 — the 9B pair only (resumes shared question bank):
 # CFG = replace(CFG, RUN_NAME="s1",
-#               ONLY_MODELS=("qwen2.5-7b-instruct", "qwen2.5-7b-base"))
+# CFG = replace(CFG, RUN_NAME="v35_full1000",
+#               ONLY_MODELS=("qwen3.5-9b-instruct", "qwen3.5-9b-base"))
 
 print(f"config hash   : {CFG.hash()}")
 print(f"run name      : {CFG.RUN_NAME}")
@@ -525,11 +921,33 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
 def code_sha() -> str:
+    """Bind every run to a real git commit (audit fix: `code_sha: "nogit"`
+    made runs unreproducible). Walks up from the output dir looking for a
+    .git anchor, because notebook platforms copy the pipeline file WITHOUT
+    the repo. CODE_SHA env var overrides (set it when launching on Molab/
+    Kaggle from a clone)."""
+    env = os.environ.get("CODE_SHA", "").strip()
+    if env:
+        return env
     try:
         r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5)
         if r.returncode == 0:
             return r.stdout.strip()
+        probe = Path.cwd()
+        for _ in range(6):
+            if (probe / ".git").exists():
+                r = subprocess.run(["git", "-C", str(probe), "rev-parse", "--short", "HEAD"],
+                                   capture_output=True, text=True, timeout=5)
+                if r.returncode == 0:
+                    return r.stdout.strip()
+            if probe.parent == probe:
+                break
+            probe = probe.parent
     except Exception:
+        pass
+    try:                                                  # LOG may not exist yet on first call
+        LOG.log("code_sha_missing", hint="no .git found — set CODE_SHA env or run inside the repo clone")
+    except NameError:
         pass
     return "nogit"
 
@@ -542,6 +960,8 @@ def build_provenance(cfg: Config) -> dict:
         "seed": cfg.SEED,
         "code_sha": code_sha(),
         "platform": cfg.resolved_platform(),
+        "hf_token_set": bool(os.environ.get("HF_TOKEN")),   # presence only, never the value
+        "linear_attn_kernels": os.environ.get("LINEAR_ATTN_KERNELS", "unknown"),
         "devices": DEVICES,
         "dtype": str(cfg.resolved_dtype()),
         "started_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -1416,7 +1836,7 @@ COMPUTE_ESTIMATE = estimate_compute(CFG)
 # CELL 9 — model manager: load / free / concurrency policy
 # "after every model run clear gpu memory and checkpoint" is enforced here.
 # ============================================================================
-from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
 
 def auto_batch_size(model_spec: dict, tier_spec: dict, cfg: Config, n_return: int = 1) -> int:
@@ -1453,19 +1873,49 @@ class LoadedModel:
         self.hidden_device = next(model.parameters()).device
 
 
+def text_stack(model):
+    """Resolve the TEXT decoder module for hooks / prefill across wrapper
+    architectures. Qwen2.5-style CausalLM: model.model -> Qwen2Model (has
+    .layers/.embed_tokens). Qwen 3.5: ForConditionalGeneration -> model.model
+    is a multimodal container whose TEXT stack lives under .language_model.
+    Raises with the submodule inventory when nothing matches — a loud error,
+    never a silent wrong-layer tap."""
+    m = getattr(model, "model", model)
+    lm_stack = getattr(m, "language_model", None)
+    if lm_stack is not None and hasattr(lm_stack, "layers"):
+        return lm_stack
+    if hasattr(m, "layers") and hasattr(m, "embed_tokens"):
+        return m
+    inner = getattr(lm_stack if lm_stack is not None else m, "model", None)
+    if inner is not None and hasattr(inner, "layers"):
+        return inner
+    names = [n for n, _ in m.named_children()]
+    raise RuntimeError(
+        f"cannot locate text decoder stack (children: {names}). "
+        f"Update text_stack() for this architecture before tapping activations.")
+
+
 def load_model(name: str, cfg: Config) -> LoadedModel:
     spec = MODEL_SPECS[name]
     t0 = time.time()
     tok = AutoTokenizer.from_pretrained(spec["hf_id"], padding_side="left", trust_remote_code=False)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
-    model = AutoModelForCausalLM.from_pretrained(
-        spec["hf_id"],
+    load_kwargs = dict(
         torch_dtype=cfg.resolved_dtype(),
         attn_implementation=cfg.ATTN_IMPL,
         device_map=device_map(cfg),
         low_cpu_mem_usage=True,
     )
+    try:
+        model = AutoModelForCausalLM.from_pretrained(spec["hf_id"], **load_kwargs)
+    except Exception as exc:                               # noqa: BLE001
+        # Multimodal wrappers (e.g. Qwen3_5ForConditionalGeneration) are not
+        # registered under AutoModelForCausalLM in every transformers version.
+        LOG.log("causal_load_failed", model=name, error=str(exc)[:160],
+                note="retrying as image-text-to-text")
+        from transformers import AutoModelForImageTextToText
+        model = AutoModelForImageTextToText.from_pretrained(spec["hf_id"], **load_kwargs)
     model.eval()
     model.generation_config.pad_token_id = tok.pad_token_id
     LOG.log("model_loaded", model=name, secs=round(time.time() - t0, 1),
@@ -1545,20 +1995,28 @@ def percentile_layers(n_layers: int, percentiles: Sequence[int]) -> dict[int, in
 
 class ActivationTap:
     """Registers forward hooks on the requested depth points and captures the
-    last-position hidden vector of each forward pass."""
+    last-position hidden vector of each forward pass.
+
+    Audit fix (finding 1): the hook buffer must reflect the LAST PROMPT token,
+    not the last GENERATED token. `freeze()` is called right after the
+    dedicated prompt-prefill forward pass so that autoregressive decoding
+    inside generate() can no longer overwrite the captured activations."""
 
     def __init__(self, lm: LoadedModel, percentiles: Sequence[int]):
         self.lm = lm
         self.map = percentile_layers(lm.spec["layers"], percentiles)
         self.buffer: dict[int, torch.Tensor] = {}
         self._handles: list[Any] = []
-        base = lm.model.model                     # Qwen2ForCausalLM.model
+        self.frozen = False
+        base = text_stack(lm.model)              # text decoder across wrappers
         for pct, idx in self.map.items():
             module = base.embed_tokens if idx == 0 else base.layers[idx - 1]
             self._handles.append(module.register_forward_hook(self._make_hook(pct)))
 
     def _make_hook(self, pct: int) -> Callable:
         def hook(_module, _inp, out):
+            if self.frozen:
+                return
             h = out[0] if isinstance(out, tuple) else out
             # left padding => index -1 is the true last prompt token for all rows
             self.buffer[pct] = h[:, -1, :].detach().to(torch.float32).cpu()
@@ -1568,6 +2026,10 @@ class ActivationTap:
         out = {p: t.numpy() for p, t in self.buffer.items()}
         self.buffer = {}
         return out
+
+    def freeze(self) -> None:
+        """Stop capturing: decode-step forwards are ignored from here on."""
+        self.frozen = True
 
     def close(self) -> None:
         for h in self._handles:
@@ -1608,11 +2070,30 @@ def finiteness_stats(arr: np.ndarray) -> dict:
 @torch.no_grad()
 def generate_batch(lm: LoadedModel, prompts: list[str], max_new_tokens: int,
                    temperature: float, top_p: float, n_return: int,
-                   tap: "ActivationTap | None" = None) -> tuple[list[list[str]], dict]:
+                   tap: "ActivationTap | None" = None,
+                   want_logprobs: bool = False) -> tuple[list[list[str]], dict, list[list[float]]]:
+    """Returns (texts grouped per prompt, activations, per-sequence
+    length-normalized log-probs grouped per prompt).
+
+    Activation capture (audit fix 1): a DEDICATED prefill forward pass over the
+    prompt runs BEFORE generate(); the tap is popped immediately (last PROMPT
+    token) and frozen so the autoregressive decode cannot overwrite it. The
+    prefill goes through the transformer body only (no LM-head logits), so it
+    costs one extra context pass and no vocab-sized tensor.
+    """
     tok = lm.tokenizer
     enc = tok(prompts, return_tensors="pt", padding=True, truncation=True, max_length=1536)
     enc = {k: v.to(lm.hidden_device) for k, v in enc.items()}
     do_sample = temperature and temperature > 0
+
+    acts: dict[int, np.ndarray] = {}
+    if tap is not None:
+        base = text_stack(lm.model)              # transformer body: no logits head
+        with torch.no_grad():
+            base(input_ids=enc["input_ids"], attention_mask=enc.get("attention_mask"))
+        acts = tap.pop()
+        tap.freeze()
+
     gen_kwargs = dict(
         max_new_tokens=max_new_tokens,
         do_sample=bool(do_sample),
@@ -1620,21 +2101,51 @@ def generate_batch(lm: LoadedModel, prompts: list[str], max_new_tokens: int,
         pad_token_id=tok.pad_token_id,
         return_dict_in_generate=False,
     )
+    record_lp = bool(want_logprobs and do_sample)
     if do_sample:
         gen_kwargs.update(temperature=float(temperature), top_p=float(top_p))
+    if record_lp:
+        gen_kwargs.update(return_dict_in_generate=True, output_scores=True)
     out = lm.model.generate(**enc, **gen_kwargs)
-    acts = tap.pop() if tap is not None else {}
-    plen = enc["input_ids"].shape[1]
-    texts = tok.batch_decode(out[:, plen:], skip_special_tokens=True)
+
+    seq_lps: list[list[float]] = []
+    if record_lp:
+        # Per-token log-probs, computed MANUALLY rather than via
+        # GenerateDecoderOnlyOutput.compute_transition_scores: that method was
+        # removed from generation outputs in recent transformers (>=4.5x) and
+        # its sampling-correct usage is normalize_logits=True anyway. This
+        # reproduces exactly that: log_softmax over the processed scores,
+        # gather the sampled token, pad-masked length-normalised mean.
+        import torch.nn.functional as F
+        seqs = out.sequences
+        new_tokens = seqs[:, enc["input_ids"].shape[1]:]
+        steps = []
+        for step_score, tok_col in zip(out.scores, new_tokens.T):
+            lp_step = F.log_softmax(step_score.float(), dim=-1)
+            steps.append(lp_step.gather(1, tok_col.unsqueeze(-1)).squeeze(-1))
+        tsc = torch.stack(steps, dim=-1)                      # [batch*n, gen_len]
+        pad_mask = (new_tokens != tok.pad_token_id).float()
+        lengths = pad_mask.sum(dim=-1).clamp(min=1)
+        lp = ((tsc * pad_mask).sum(dim=-1) / lengths).cpu().numpy()
+        texts = tok.batch_decode(new_tokens, skip_special_tokens=True)
+        flat = [round(float(x), 6) for x in lp]
+        seq_lps = [flat[i * n_return : (i + 1) * n_return] for i in range(len(prompts))]
+    else:
+        texts = tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
     grouped = [texts[i * n_return : (i + 1) * n_return] for i in range(len(prompts))]
-    return grouped, acts
+    return grouped, acts, seq_lps
 
 
 def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, cfg: Config,
                    ckpt: Checkpoint, n_return: int = 1, temperature: float | None = None,
-                   capture_activations: bool = False) -> dict:
+                   capture_activations: bool = False,
+                   prompt_variant: str | None = None) -> dict:
     """Drive one (model, tier, variant) pass with resume, OOM backoff, and
-    periodic cache clearing. Returns a stats dict for the ledger."""
+    periodic cache clearing. Returns a stats dict for the ledger.
+
+    `prompt_variant` decouples the PROMPT template from the checkpoint key
+    (audit fix: EXTRACT taps activations on exactly the SAMPLE prompts so the
+    three signals are measured on the same generation context)."""
     tier_spec = TIER_SPECS[tier]
     todo = [it for it in items if not ckpt.has(qid=it["qid"], variant=variant)]
     stats = {"requested": len(items), "todo": len(todo), "generated": 0, "parse_ok": 0,
@@ -1655,11 +2166,13 @@ def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, 
         i = 0
         while i < len(todo):
             chunk = todo[i : i + bs]
-            prompts = [build_prompt(variant, it["question"], tier_spec, lm.spec, lm.tokenizer, cfg)
+            prompts = [build_prompt(prompt_variant or variant, it["question"], tier_spec,
+                                    lm.spec, lm.tokenizer, cfg)
                        for it in chunk]
             try:
-                gens, acts = generate_batch(lm, prompts, tier_spec["max_new_tokens"], temp,
-                                            cfg.SAMPLE_TOP_P, n_return, tap)
+                gens, acts, lps = generate_batch(lm, prompts, tier_spec["max_new_tokens"], temp,
+                                                 cfg.SAMPLE_TOP_P, n_return, tap,
+                                                 want_logprobs=bool(cfg.SAMPLE_SEQ_LOGPROBS))
             except torch.cuda.OutOfMemoryError:
                 free_cuda()
                 stats["oom_backoffs"] += 1
@@ -1690,6 +2203,8 @@ def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, 
                 }
                 if cfg.SAVE_RAW_TEXT:
                     rec["raw"] = texts if n_return > 1 else texts[0]
+                if n_return > 1 and lps:
+                    rec["seq_logprob"] = lps[j] if j < len(lps) else []
                 ckpt.add(rec)
                 stats["generated"] += 1
                 stats["parse_ok"] += float(rec["parse_ok"])
@@ -1846,20 +2361,34 @@ def stage_sample(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str]) 
 def stage_extract(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str]) -> dict:
     """Signal 3 — single greedy pass, five percentile taps at the last prompt
     token (PLAN §6). Uses the SAMPLE prompt so the probe reads a plain
-    answering context, not a confidence-elicitation context."""
+    answering context, not a confidence-elicitation context.
+
+    Audit fix (finding 4): `prompt_variant="SAMPLE"` renders the IDENTICAL
+    prompt strings the behavioral signal samples from, so verbal/behavioral/
+    internal are compared on aligned generation contexts rather than divergent
+    trajectories. The checkpoint key stays "EXTRACT"."""
     out = {}
     for tier in cfg.active_tiers():
         if cell_id(lm.name, tier) not in committed:
             continue
         with open_ckpt("extract", lm.name, tier, cfg) as ck:
             out[tier] = run_generation(lm, cell_items(bank, tier, "all"), "EXTRACT", tier, cfg, ck,
-                                       temperature=0.0, capture_activations=True)
+                                       temperature=0.0, capture_activations=True,
+                                       prompt_variant="SAMPLE")
     return out
 
 
 def evaluate_band_gate(bank: dict, cfg: Config, nli: "NLIGrader | None") -> dict:
-    """Grade the pilot and decide cell commitment (PLAN §3, §10 — a ragged grid
-    is the planned outcome, not a failure)."""
+    """Grade the pilot to MEASURE per-cell accuracy (PLAN §3).
+
+    Audit resolution (finding 9 / §5): cells are no longer DELETED for
+    falling outside the 25–80% band — deletion discarded 75% of the grid
+    (all of R2/R3, all of 0.5B, most of C3) and selection ran on a noisy
+    n=100 pilot. Every cell is committed; pilot accuracy is recorded per
+    cell and used downstream for within-cell matching and as a covariate
+    (the base-rate CONTROL is kept, the deletion is dropped).
+    COMMIT_CELLS_OUTSIDE_BAND is retained only for backwards compatibility
+    and is ignored by this gate."""
     verdicts = {}
     for model in cfg.active_models():
         for tier in cfg.active_tiers():
@@ -1879,7 +2408,7 @@ def evaluate_band_gate(bank: dict, cfg: Config, nli: "NLIGrader | None") -> dict
             acc = n_ok / n_tot if n_tot else 0.0
             lo, hi = cfg.ACCURACY_BAND
             in_band = lo <= acc <= hi
-            committed = bool(in_band or cfg.COMMIT_CELLS_OUTSIDE_BAND)
+            committed = True          # deletion filter REMOVED (audit finding 9)
             verdicts[cell_id(model, tier)] = {
                 "model": model, "tier": tier, "n": n_tot, "accuracy": round(acc, 4),
                 "band": [lo, hi], "in_band": in_band, "committed": committed,
@@ -1887,7 +2416,9 @@ def evaluate_band_gate(bank: dict, cfg: Config, nli: "NLIGrader | None") -> dict
             }
     json_write(PATHS["derived"] / "cell_commitments.json", verdicts)
     n_c = sum(v["committed"] for v in verdicts.values())
-    LOG.log("band_gate", cells=len(verdicts), committed=n_c, ragged=len(verdicts) - n_c)
+    LOG.log("band_gate", cells=len(verdicts), committed=n_c,
+            out_of_band_committed=len(verdicts) - sum(v["in_band"] for v in verdicts.values()),
+            note="deletion filter disabled — accuracy recorded for matching/covariate use")
     return verdicts
 
 
@@ -1938,10 +2469,71 @@ def stage_grade(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFram
     return df
 
 
+_CLUSTER_MATH_SUBS = [
+    (r"\\left|\\right|\\!|\\,|\\;", ""),
+    (r"\\dfrac|\\tfrac", r"\\frac"),
+    (r"\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"((\1)/(\2))"),
+    (r"\\sqrt\s*\{([^{}]*)\}", r"sqrt(\1)"),
+    (r"\^\s*\{([^{}]*)\}", r"^(\1)"),
+    (r"\\(text|mbox|boxed)\{([^{}]*)\}", r"\2"),
+]
+
+
+def _cluster_math_norm(s: str) -> str:
+    """LaTeX -> plain arithmetic for CLUSTERING (independent of math_verify,
+    whose absence used to leave \\frac answers stranded as distinct clusters).
+    '\\frac{11}{15}' -> '((11)/(15))', 'x = 60' -> 'x = 60'."""
+    t = (s or "").strip().strip("$").strip()
+    for pat, rep in _CLUSTER_MATH_SUBS:
+        t = re.sub(pat, rep, t)
+    t = t.replace("\\cdot", "*").replace("\\times", "*")
+    t = t.replace(",", "").replace("%", "").replace("$", "")
+    return t.strip().lower()
+
+
+def _math_pair_equivalent(a: str, b: str) -> bool:
+    """Bidirectional MATH equivalence between two answer strings for semantic
+    clustering (audit fix 3b: '11/15' == '\\frac{11}{15}', '0.5' == '1/2',
+    'x = 60' == '60'). Order: normalised identity -> pure-number tolerance ->
+    sympy expression identity -> grading oracle."""
+    if a is None or b is None:
+        return False
+    if a == b:
+        return True
+    x, y = _cluster_math_norm(a), _cluster_math_norm(b)
+    if x == y:
+        return True
+    # Pure numbers (no / or ^): compare with relative tolerance. extract_number
+    # takes the LAST number, which is wrong for ratios like 11/15 — hence the
+    # slash/exponent guard.
+    if all(ch not in x + y for ch in "/^"):
+        fx, fy = extract_number(x), extract_number(y)
+        if fx is not None and fy is not None:
+            return abs(fx - fy) <= 1e-6 * max(1.0, abs(fx), abs(fy))
+    if SYMPY_OK:
+        try:
+            ex = sym_parse_expr(x.replace("^", "**"), evaluate=True)
+            ey = sym_parse_expr(y.replace("^", "**"), evaluate=True)
+            diff = ex - ey
+            return bool(diff == 0 or (hasattr(diff, "equals") and diff.equals(0)))
+        except Exception:                                  # noqa: BLE001
+            pass
+    try:
+        return bool(grade_latex(a, [b]) or grade_latex(b, [a]))
+    except Exception:                                      # noqa: BLE001
+        return False
+
+
 def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
                      nli: "NLIGrader | None") -> list[int]:
-    """Fast path: normalised string identity. Robust path: bidirectional NLI
-    entailment + agglomerative merge (PLAN §5·2)."""
+    """Fast path: normalised string identity. Math forms: symbolic/numeric
+    equivalence via the grading oracle, then union-find. Robust path:
+    bidirectional NLI entailment + agglomerative merge (PLAN §5·2).
+
+    Audit fix 3b: NLI merging used to be gated on `answer_form ∈ {short,
+    entity}`, so every GSM8K/MATH cell silently degraded to exact-string
+    clustering. The gate now includes math forms, and math answers are first
+    merged by symbolic/numeric equivalence."""
     norm = [normalize_math(a) if answer_form == "latex" else normalize_text(a, cfg.STRIP_ARTICLES)
             for a in answers]
     labels: list[int] = []
@@ -1956,15 +2548,49 @@ def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
             reps.append(n)
             hit = len(reps) - 1
         labels.append(hit)
-    if not (cfg.USE_NLI_FALLBACK and nli is not None and answer_form in ("short", "entity")):
-        return labels
-    if len(reps) < 2:
-        return labels
-    # Merge string-distinct clusters that entail each other both ways.
-    originals = {}
+
+    originals: dict[int, str] = {}
     for a, l in zip(answers, labels):
         originals.setdefault(l, a)
     keys = sorted(originals)
+    if len(keys) < 2:
+        return labels
+
+    parent = {k: k for k in keys}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def compress(mapping: dict) -> list[int]:
+        canon = {v: i for i, v in enumerate(sorted(set(mapping.values())))}
+        return [canon[mapping[l]] for l in labels]
+
+    # Math/symbolic merge — cheap oracle pairs before any NLI call.
+    if answer_form in ("latex", "numeric"):
+        for i in range(len(keys)):
+            for j in range(i + 1, len(keys)):
+                if find(keys[i]) == find(keys[j]):
+                    continue
+                if _math_pair_equivalent(originals[keys[i]], originals[keys[j]]):
+                    parent[find(keys[i])] = find(keys[j])
+        remapped = {k: find(k) for k in keys}
+        if len(set(remapped.values())) < len(keys):
+            labels = compress(remapped)
+            originals = {}
+            for a, l in zip(answers, labels):
+                originals.setdefault(l, a)
+            keys = sorted(originals)
+            parent = {k: k for k in keys}
+
+    if not (cfg.USE_NLI_FALLBACK and nli is not None
+            and answer_form in ("short", "entity", "latex", "numeric")):
+        return labels
+    if len(keys) < 2:
+        return labels
+    # Merge string-distinct clusters that entail each other both ways.
     pairs, meta = [], []
     for i in range(len(keys)):
         for j in range(i + 1, len(keys)):
@@ -1976,13 +2602,6 @@ def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
         s = nli.entails(pairs)
     except Exception:                                   # noqa: BLE001
         return labels
-    parent = {k: k for k in keys}
-
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
 
     for idx, (a, b) in enumerate(meta):
         if min(s[2 * idx], s[2 * idx + 1]) >= cfg.NLI_ENTAIL_THRESHOLD:
@@ -1993,8 +2612,21 @@ def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
 
 
 def stage_entropy(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFrame:
-    """Shannon entropy over semantic cluster mass -> behavioral confidence."""
+    """Shannon entropy over semantic cluster mass -> behavioral confidence.
+
+    Audit fixes over the v2 shortcut implementation:
+      * Rao-Blackwellization — cluster masses are weighted by
+        length-normalized sequence log-probs recorded at sampling time
+        (`seq_logprob`), replacing raw discrete sample counts; uniform
+        weights are the documented fallback when log-probs are absent.
+      * Normalization is against the TOTAL requested samples N (not the
+        valid count), so parse failures cost confidence instead of
+        inflating it.
+      * Questions with fewer than ENTROPY_MIN_VALID parsed samples get
+        confidence NaN rather than the old spurious 1.0 (n=1 case)."""
     rows = []
+    N_total = int(cfg.N_SAMPLES)
+    H_max = float(np.log(N_total))
     for model in cfg.active_models():
         for tier in cfg.active_tiers():
             recs = jsonl_read(raw_path("sample", model, tier))
@@ -2005,28 +2637,43 @@ def stage_entropy(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFr
                 q = gold.get(r["qid"])
                 if q is None:
                     continue
-                answers = [p.get("answer") for p in r["parsed"] if p.get("answer")]
-                n = len(answers)
+                parsed = r["parsed"] if isinstance(r["parsed"], list) else [r["parsed"]]
+                lps = r.get("seq_logprob") or []
+                pairs = [(p.get("answer"),
+                          lps[i] if i < len(lps) and lps[i] is not None else None)
+                         for i, p in enumerate(parsed)]
+                valid = [(a, lp) for a, lp in pairs if a]
+                n = len(valid)
+                base_row = dict(model=model, tier=tier, qid=r["qid"], split=r["split"], n_valid=n)
                 if n == 0:
-                    rows.append(dict(model=model, tier=tier, qid=r["qid"], split=r["split"],
-                                     n_valid=0, n_clusters=0, entropy=np.nan,
-                                     confidence_behavioral=np.nan, modal_share=np.nan))
+                    rows.append({**base_row, "n_clusters": 0, "entropy": np.nan,
+                                 "entropy_max": H_max, "confidence_behavioral": np.nan,
+                                 "modal_share": np.nan, "low_valid": True})
                     continue
-                labels = cluster_answers(answers, q["answer_form"], cfg, nli)
-                sizes = np.array(list(Counter(labels).values()), dtype=float)
-                p = sizes / sizes.sum()
-                H = float(sps.entropy(p))
-                H_max = float(np.log(n)) if n > 1 else 0.0
-                rows.append(dict(
-                    model=model, tier=tier, qid=r["qid"], split=r["split"], n_valid=n,
-                    n_clusters=int(len(sizes)), entropy=H, entropy_max=H_max,
-                    confidence_behavioral=float(1 - H / H_max) if H_max > 0 else 1.0,
-                    modal_share=float(sizes.max() / sizes.sum()),
-                ))
+                labels = cluster_answers([a for a, _ in valid], q["answer_form"], cfg, nli)
+                if all(lp is not None for _, lp in valid):
+                    x = np.array([lp for _, lp in valid], dtype=float)
+                    x = np.exp(x - x.max())
+                    weights = x / x.sum()
+                else:
+                    weights = np.ones(n) / float(n)     # uniform = raw counts fallback
+                masses = np.zeros(max(labels) + 1, dtype=float)
+                for li, wi in zip(labels, weights):
+                    masses[li] += wi
+                H = float(-(masses * np.log(np.clip(masses, 1e-12, None))).sum())
+                conf = float(1.0 - min(H / H_max, 1.0)) if H_max > 0 else np.nan
+                low_valid = n < int(cfg.ENTROPY_MIN_VALID)
+                rows.append({**base_row,
+                             "n_clusters": int((masses > 1e-9).sum()),
+                             "entropy": round(H, 6), "entropy_max": H_max,
+                             "confidence_behavioral": (np.nan if low_valid else round(conf, 6)),
+                             "modal_share": round(float(masses.max()), 6),
+                             "low_valid": bool(low_valid)})
     df = pd.DataFrame(rows)
     if len(df):
         df.to_parquet(PATHS["derived"] / "entropy.parquet", index=False)
     LOG.log("entropy", rows=len(df),
+            low_valid=int(df["low_valid"].sum()) if len(df) else 0,
             mean_conf=round(float(df["confidence_behavioral"].mean()), 4) if len(df) else None)
     return df
 
@@ -2099,11 +2746,28 @@ def probe_labels(model: str, tier: str, qids: list[str], graded: pd.DataFrame,
     return np.clip(vals, 0, 1), vals >= 0
 
 
-def fit_probe(X: np.ndarray, y: np.ndarray, cfg: Config, seed: int) -> Any:
+def fit_probe(X: np.ndarray, y: np.ndarray, cfg: Config, seed: int, C: float = 1.0) -> Any:
     return make_pipeline(
         StandardScaler(),
-        LogisticRegression(max_iter=cfg.PROBE_MAX_ITER, C=1.0, random_state=seed, n_jobs=None),
+        LogisticRegression(max_iter=cfg.PROBE_MAX_ITER, C=float(C), random_state=seed, n_jobs=None),
     ).fit(X, y)
+
+
+def select_probe_C(X_tr: np.ndarray, y_tr: np.ndarray, X_ca: np.ndarray, y_ca: np.ndarray,
+                   cfg: Config, seed: int) -> tuple[float, Any]:
+    """Audit fix (`PROBE_C_GRID` was dead code, C=1.0 hardcoded, train AUROC
+    saturated at 1.000 in 51/65 rows): C is selected on the CALIBRATION split
+    over cfg.PROBE_C_GRID — never on train AUROC, which rewards overfitting."""
+    best_C, best_clf, best_auroc = None, None, -np.inf
+    for c in cfg.PROBE_C_GRID:
+        clf = fit_probe(X_tr, y_tr, cfg, seed, C=c)
+        a = safe_auroc(y_ca, clf.predict_proba(X_ca)[:, 1])
+        if np.isfinite(a) and a > best_auroc:
+            best_C, best_clf, best_auroc = float(c), clf, a
+    if best_clf is None:
+        return 1.0, fit_probe(X_tr, y_tr, cfg, seed, C=1.0)
+    LOG.log("probe_c_selected", C=best_C, auroc_cal=round(best_auroc, 4))
+    return best_C, best_clf
 
 
 def safe_auroc(y: np.ndarray, s: np.ndarray) -> float:
@@ -2128,9 +2792,24 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
         if loaded is None:
             continue
         qids, mats = loaded
+
+        # Gate 3 ENFORCEMENT (audit fix: it was computed but never blocked).
+        # Non-finite activations anywhere in the cell abort downstream probe
+        # fitting for that cell instead of poisoning the training set.
+        fin = json_read(PATHS["acts"] / f"{model}__{tier}.finiteness.json", {})
+        stored_worst = max((f.get("nonfinite_frac", 0.0) for f in fin.values()), default=0.0)
+        runtime_worst = 0.0
+        for X_chk in mats.values():
+            finite_rows = np.isfinite(X_chk).all(axis=1)
+            runtime_worst = max(runtime_worst, float(1.0 - finite_rows.mean()))
+        if stored_worst > 0.0 or runtime_worst > 0.0:
+            LOG.log("gate3_blocked", cell=cid, stored_nonfinite=round(stored_worst, 6),
+                    runtime_nonfinite=round(runtime_worst, 6),
+                    note="non-finite activations — probing blocked for this cell")
+            continue
+
         y, mask = probe_labels(model, tier, qids, graded, entropy, cfg)
         splits = np.array([split_of[tier].get(q, "train") for q in qids])
-        fin = json_read(PATHS["acts"] / f"{model}__{tier}.finiteness.json", {})
 
         tr = mask & (splits == "train")
         ca = mask & (splits == "calibration")
@@ -2143,24 +2822,25 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
             X = mats.get(pct)
             if X is None:
                 continue
-            finite_rows = np.isfinite(X).all(axis=1)
-            tr_p, ca_p, te_p = tr & finite_rows, ca & finite_rows, te & finite_rows
+            tr_p, ca_p, te_p = tr, ca, te
             if tr_p.sum() < 20 or ca_p.sum() < 10 or len(np.unique(y[tr_p])) < 2:
                 continue
 
-            clf = fit_probe(X[tr_p], y[tr_p], cfg, cfg.SEED)
+            best_C, clf = select_probe_C(X[tr_p], y[tr_p], X[ca_p], y[ca_p], cfg, cfg.SEED)
             s_tr = clf.predict_proba(X[tr_p])[:, 1]
             s_ca = clf.predict_proba(X[ca_p])[:, 1]
             s_te = clf.predict_proba(X[te_p])[:, 1] if te_p.sum() else np.array([])
 
-            # Label-shuffle null (PLAN §14.1)
+            # Label-shuffle null (PLAN §14.1) — refit at the selected C so the
+            # null mirrors the actual procedure.
             rng = np.random.default_rng(cfg.SEED + pct)
             null = []
             for _ in range(cfg.LABEL_SHUFFLE_REPEATS):
                 yp = rng.permutation(y[tr_p])
                 if len(np.unique(yp)) < 2:
                     continue
-                null.append(safe_auroc(y[ca_p], fit_probe(X[tr_p], yp, cfg, cfg.SEED).predict_proba(X[ca_p])[:, 1]))
+                null.append(safe_auroc(y[ca_p], fit_probe(X[tr_p], yp, cfg, cfg.SEED,
+                                                          C=best_C).predict_proba(X[ca_p])[:, 1]))
             null = np.array([x for x in null if np.isfinite(x)])
 
             # Surface / prompt-only baseline (PLAN §14.1, §17.3)
@@ -2190,6 +2870,11 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
                 beats_null=bool(null.size and auroc_cal > np.percentile(null, 95)),
                 auroc_surface=auroc_surface,
                 beats_surface=bool(np.isfinite(auroc_surface) and auroc_cal > auroc_surface),
+                C_selected=best_C,
+                # Negative control (audit fix): p0 reads the embedding of a
+                # CONSTANT prompt-ending token, so its AUROC must be ~0.50.
+                # A large deviation means the tap is reading generated tokens.
+                p0_neg_control_dev=(abs(auroc_cal - 0.5) if pct == 0 else float("nan")),
                 nonfinite_frac=fin.get(f"p{pct}", {}).get("nonfinite_frac", 0.0),
                 meets_gate=bool(np.isfinite(auroc_cal) and auroc_cal >= cfg.AUROC_GATE),
             ))
@@ -2201,26 +2886,39 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
 
 
 def gate3_verdict(sweep: pd.DataFrame, cfg: Config) -> dict:
-    """Per-cell: finiteness pre-check, then >=1 percentile with AUROC >= gate
-    that also beats the shuffle null and the surface baseline."""
+    """Per-cell: finiteness pre-check (ENFORCED upstream — blocked cells never
+    reach the sweep), the constant-token negative control at p0, then >=1
+    percentile with AUROC >= gate that also beats the shuffle null and the
+    surface baseline."""
     out = {}
     for cell, g in sweep.groupby("cell") if len(sweep) else []:
         worst_finite = float(g["nonfinite_frac"].max())
         best = g.loc[g["auroc_cal"].idxmax()] if g["auroc_cal"].notna().any() else None
+        p0 = g[(g["layer_pct"] == 0) & g["auroc_cal"].notna()]
+        p0_dev = float(p0["auroc_cal"].sub(0.5).abs().max()) if len(p0) else float("nan")
+        neg_control_ok = bool(not np.isfinite(p0_dev) or p0_dev <= cfg.P0_NEG_CONTROL_TOL)
         passes = bool(best is not None and best["meets_gate"] and best["beats_null"]
-                      and (best["beats_surface"] or not cfg.SURFACE_BASELINE))
+                      and (best["beats_surface"] or not cfg.SURFACE_BASELINE)
+                      and neg_control_ok)
         out[cell] = {
             "activations_clean": worst_finite == 0.0, "worst_nonfinite_frac": worst_finite,
+            "negative_control_p0_dev": None if not np.isfinite(p0_dev) else round(p0_dev, 4),
+            "negative_control_ok": neg_control_ok,
             "best_layer_pct": int(best["layer_pct"]) if best is not None else None,
+            "best_C": float(best["C_selected"]) if best is not None and "C_selected" in g.columns else None,
             "best_auroc_cal": float(best["auroc_cal"]) if best is not None else None,
             "beats_null": bool(best["beats_null"]) if best is not None else False,
             "beats_surface": bool(best["beats_surface"]) if best is not None else False,
             "passes": passes,
-            "diagnosis": ("clean activations, no signal" if passes is False and worst_finite == 0.0
-                          else "dirty activations" if worst_finite > 0 else "pass"),
+            "diagnosis": ("dirty activations" if worst_finite > 0
+                          else "negative control failed — tap likely reading generated tokens"
+                          if not neg_control_ok
+                          else "clean activations, no signal" if not passes
+                          else "pass"),
         }
     json_write(PATHS["derived"] / "gate3.json", out)
-    LOG.log("gate3", cells=len(out), passed=sum(v["passes"] for v in out.values()))
+    LOG.log("gate3", cells=len(out), passed=sum(v["passes"] for v in out.values()),
+            neg_control_failed=sum(1 for v in out.values() if not v["negative_control_ok"]))
     return out
 
 
@@ -2371,13 +3069,20 @@ def empirical_bucket_map(graded: pd.DataFrame, cfg: Config) -> dict:
 
 
 def verbal_scores(graded: pd.DataFrame, bmap: dict, cfg: Config) -> pd.DataFrame:
-    """Convert each format to a common 0–1 scale (PLAN §4 agreement check §2)."""
+    """Convert each format to a common 0–1 scale (PLAN §4 agreement check §2).
+
+    Audit fix (finding 2): Format A's raw numeric stated confidence is the
+    CANONICAL verbal axis — the model's own number, scaled to [0, 1]. Format B
+    is label-derived (bucket -> empirical accuracy fit on calibration), so it
+    is reported only as an auxiliary SUPERVISED accuracy baseline, never as
+    what the model said."""
     rows = []
     g = graded[graded.variant.isin(["A", "B", "C"]) & (graded.sample_idx == 0)]
     for r in g.itertuples():
         cid = cell_id(r.model, r.tier)
         if r.variant == "A":
-            v = r.confidence
+            # Raw stated confidence on its native 0–100 scale -> [0, 1].
+            v = r.confidence / 100.0 if r.confidence is not None else np.nan
         elif r.variant == "B":
             v = bmap.get(cid, {}).get(r.bucket, {}).get("p") if r.bucket else np.nan
         else:
@@ -2389,6 +3094,7 @@ def verbal_scores(graded: pd.DataFrame, bmap: dict, cfg: Config) -> pd.DataFrame
             v = float(v)
             if not np.isfinite(v):
                 v = np.nan
+            v = float(np.clip(v, 0.0, 1.0))
         except (TypeError, ValueError):
             v = np.nan
         rows.append(dict(model=r.model, tier=r.tier, qid=r.qid, split=r.split,
@@ -2411,6 +3117,7 @@ def internal_scores(sweep: pd.DataFrame, bank: dict, graded: pd.DataFrame,
             continue
         best = g.loc[g["auroc_cal"].idxmax()]
         model, tier, pct = best["model"], best["tier"], int(best["layer_pct"])
+        win_C = float(best.get("C_selected", 1.0) or 1.0)
         loaded = load_activations(model, tier)
         if loaded is None:
             continue
@@ -2424,7 +3131,7 @@ def internal_scores(sweep: pd.DataFrame, bank: dict, graded: pd.DataFrame,
         tr = mask & fin & (splits == "train")
         if tr.sum() < 20 or len(np.unique(y[tr])) < 2:
             continue
-        clf = fit_probe(X[tr], y[tr], cfg, cfg.SEED)
+        clf = fit_probe(X[tr], y[tr], cfg, cfg.SEED, C=win_C)
         s_all = clf.predict_proba(X)[:, 1]
         for i, q in enumerate(qids):
             if not fin[i]:
@@ -2443,16 +3150,17 @@ def assemble_signals(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
     verbal = verbal_scores(graded, bmap, cfg)
     internal = internal_scores(sweep, bank, graded, entropy, committed, cfg)
 
-    # Canonical verbal format (PLAN §4·4), with the §8·6 pre-flight applied
-    # BEFORE selection rather than after.
+    # Canonical verbal axis (audit fix, finding 2): Format A — the model's raw
+    # stated confidence scaled to [0, 1] — is canonical BY CONSTRUCTION.
+    # Format B is LABEL-DERIVED (each bucket maps to that bucket's empirical
+    # accuracy fit on the calibration split, then calibrated again on the same
+    # split: `format_stats.B.ece = 2.3e-17`, identically zero by
+    # construction). B is therefore NEVER eligible for the canonical role; it
+    # stays in fmt_stats / verbal_long as a supervised P(correct) reference,
+    # reported separately.
     #
-    # Selecting on ECE alone is unsafe here: format B maps each bucket to that
-    # bucket's empirical accuracy, so a model that only ever uses one bucket
-    # produces a CONSTANT equal to the base rate — which scores ECE ~= 0 while
-    # carrying no information at all. Ranking on ECE therefore rewards exactly
-    # the degeneracy §8·6 exists to exclude. Brier is used instead because it
-    # decomposes into reliability MINUS resolution, so a constant predictor is
-    # penalised by its zero resolution.
+    # The §8·6 pre-flight (>= MIN_DISTINCT_VERBAL distinct values) still
+    # applies to A before it can represent a cell, and to C as fallback.
     fmt_stats = {}
     for v in ("A", "B", "C"):
         s = verbal[(verbal.variant == v) & (verbal.split == "calibration")]
@@ -2465,17 +3173,20 @@ def assemble_signals(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
             "brier": brier(s.verbal_raw.values, s.correct.values.astype(float)) if ok else float("inf"),
             "eligible": bool(ok and nd >= cfg.MIN_DISTINCT_VERBAL),
         }
-    eligible = [v for v in ("A", "B", "C") if fmt_stats[v]["eligible"]]
+    eligible = [v for v in ("A", "C") if fmt_stats[v]["eligible"]]   # B excluded by design
     if eligible:
-        canonical = min(eligible, key=lambda v: fmt_stats[v]["brier"])
+        canonical = "A" if "A" in eligible else min(eligible, key=lambda v: fmt_stats[v]["brier"])
     else:
-        # Nothing clears the pre-flight: keep the most-varied format so the
-        # pipeline still runs, but the degeneracy is recorded loudly.
-        canonical = max(fmt_stats, key=lambda v: fmt_stats[v]["n_distinct"])
+        # Nothing clears the pre-flight: keep the most-varied NON-label-derived
+        # format so the pipeline still runs, but the degeneracy is recorded loudly.
+        non_b = {v: fmt_stats[v] for v in ("A", "C")}
+        canonical = max(non_b, key=lambda v: non_b[v]["n_distinct"])
         LOG.log("verbal_all_formats_degenerate", chosen=canonical,
                 n_distinct={k: v["n_distinct"] for k, v in fmt_stats.items()})
     fmt_ece = {k: v["ece"] for k, v in fmt_stats.items()}
     LOG.log("canonical_format", chosen=canonical, eligible=eligible,
+            note="B demoted to supervised accuracy baseline (label-derived); "
+                 "canonical verbal axis = model-stated confidence",
             brier={k: round(v["brier"], 4) for k, v in fmt_stats.items()},
             ece={k: round(v["ece"], 4) for k, v in fmt_stats.items()},
             n_distinct={k: v["n_distinct"] for k, v in fmt_stats.items()})
@@ -2676,29 +3387,58 @@ def question_features(bank: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_h2_quadrants(signals: pd.DataFrame, bank: dict, cfg: Config) -> dict:
-    """Quadrant assignment + chi-square vs question features + shuffle null."""
+QUADRANT_TAXONOMY = {
+    # calibrated verbal vs mean(behavioral, internal), thresholded at 0.5
+    ("high", "low"): "performative_certainty",   # legacy: "hopeful" — stated confidence
+                                                 # exceeds sample stability
+    ("low", "high"): "excessive_hedging",        # legacy: "suppressed" — stated confidence
+                                                 # under-reports sample consensus
+    ("high", "high"): "grounded_certainty",
+    ("low", "low"): "honest_doubt",
+}
+QUADRANT_LEGACY = {"performative_certainty": "hopeful", "excessive_hedging": "suppressed",
+                   "grounded_certainty": "agree_high", "honest_doubt": "agree_low"}
+
+
+def test_h2_quadrants(signals: pd.DataFrame, bank: dict, cfg: Config,
+                      gate1_pass: bool | None = None,
+                      gate3: dict | None = None) -> dict:
+    """Epistemic-alignment quadrant assignment (renamed per audit: retire the
+    anthropomorphic 'hopeful/suppressed' labels), a CONTINUOUS discrepancy
+    metric Δ = verbal_cal − behavioral_cal that does not depend on the 0.5
+    cut, feature association tested globally AND required to replicate across
+    multiple cells, and the PLAN §16 gate conjuncts RESTORED: H2 passes only
+    if features associate AND Gate 1 holds AND Gate 3 activations were clean."""
     test = signals[signals.split == "test"].copy()
     thr = cfg.QUADRANT_THRESHOLD
     other = test[["behavioral_cal", "internal_cal"]].mean(axis=1, skipna=True)
     test["other_cal"] = other
+
     def quad(row):
-        v, o = row["verbal_cal"], row["other_cal"]
-        if not np.isfinite(v) or not np.isfinite(o):
+        if not np.isfinite(row["verbal_cal"]) or not np.isfinite(row["other_cal"]):
             return None
-        if v >= thr and o < thr:
-            return "hopeful"
-        if v < thr and o >= thr:
-            return "suppressed"
-        return "agree_high" if v >= thr else "agree_low"
+        return QUADRANT_TAXONOMY[("high" if row["verbal_cal"] >= thr else "low",
+                                  "high" if row["other_cal"] >= thr else "low")]
     test["quadrant"] = test.apply(quad, axis=1)
+    test["quadrant_legacy"] = test["quadrant"].map(lambda q: QUADRANT_LEGACY.get(q))
+    test["delta_verbal_minus_behavioral"] = test["verbal_cal"] - test["behavioral_cal"]
     feats = question_features(bank)
     merged = test.merge(feats, on=["tier", "qid"], how="left", suffixes=("", "_f"))
     merged = merged[merged.quadrant.notna()]
 
-    out = {"counts": dict(Counter(merged["quadrant"])), "n": int(len(merged)),
-           "threshold": thr, "associations": {}}
+    counts = {k: int(v) for k, v in Counter(merged["quadrant"]).items()}
+    out = {"counts": counts,
+           "counts_legacy": {QUADRANT_LEGACY[k]: v for k, v in counts.items()},
+           "n": int(len(merged)), "threshold": thr, "associations": {}}
+    d = merged["delta_verbal_minus_behavioral"].dropna()
+    out["delta_metric"] = {
+        "n": int(len(d)), "mean": float(d.mean()) if len(d) else float("nan"),
+        "median": float(d.median()) if len(d) else float("nan"),
+        "note": "Δ = verbal_cal − behavioral_cal; continuous, independent of the 0.5 cut",
+    }
+
     rng = np.random.default_rng(cfg.SEED)
+    cell_ids = merged["model"] + "__" + merged["tier"]
     for feat in ("has_year", "is_long", "has_multi_entity", "has_number", "family"):
         if feat not in merged:
             continue
@@ -2712,20 +3452,53 @@ def test_h2_quadrants(signals: pd.DataFrame, bank: dict, cfg: Config) -> dict:
             t2 = pd.crosstab(merged["quadrant"], shuffled)
             if t2.shape[0] >= 2 and t2.shape[1] >= 2:
                 nulls.append(sps.chi2_contingency(t2)[0])
+        # Within-cell replication requirement (audit fix: H2's only passing
+        # features were tier proxies carried by three cells). A general claim
+        # about question characteristics needs the association to appear in
+        # MORE THAN ONE cell.
+        cells_sig = 0
+        for _, gc in merged.groupby(cell_ids):
+            tc = pd.crosstab(gc["quadrant"], gc[feat])
+            if tc.shape[0] >= 2 and tc.shape[1] >= 2 and len(gc) >= 40:
+                if sps.chi2_contingency(tc)[1] < 0.05:
+                    cells_sig += 1
         out["associations"][feat] = {
             "chi2": float(chi2), "p": float(p), "dof": int(dof),
             "null_p95": float(np.percentile(nulls, 95)) if nulls else float("nan"),
             "beats_null": bool(nulls and chi2 > np.percentile(nulls, 95)),
+            "cells_significant": int(cells_sig),
+            "cells_tested": int(sum(1 for _, gc in merged.groupby(cell_ids)
+                                    if len(gc) >= 40)),
+            "replicates_across_cells": bool(cells_sig >= 2),
             "table": tab.to_dict(),
         }
-    sig = [v for v in out["associations"].values() if v["p"] < 0.05 and v["beats_null"]]
-    out["h2_pass"] = bool(sig)
-    out["verdict"] = ("H2 supported — quadrant membership associates with question features "
-                      "beyond the shuffle null" if sig else
-                      "H2 falsified — no association survives the label-shuffle null")
+    sig = [f for f, v in out["associations"].items()
+           if v["p"] < 0.05 and v["beats_null"] and v["replicates_across_cells"]]
+    assoc_ok = bool(sig)
+
+    gate3_clean = bool(gate3) and all(bool(v.get("activations_clean")) for v in gate3.values())
+    out["features_associate_and_replicate"] = assoc_ok
+    out["gate1_pass"] = None if gate1_pass is None else bool(gate1_pass)
+    out["gate3_activations_clean"] = gate3_clean
+    # PLAN §16 conjunct restored (audit fix: it was silently dropped).
+    out["h2_pass"] = bool(assoc_ok and gate1_pass is True and gate3_clean)
+    failed = []
+    if not assoc_ok:
+        failed.append("no feature association replicates across cells")
+    if gate1_pass is not True:
+        failed.append("Gate 1 (grading sanity) does not hold")
+    if not gate3:
+        failed.append("Gate 3 not evaluated (no cells were probed)")
+    elif not gate3_clean:
+        failed.append("Gate 3 activations not clean")
+    out["verdict"] = ("H2 supported — replicated feature association with the alignment taxonomy, "
+                      "with Gate 1 and Gate 3 holding"
+                      if out["h2_pass"] else
+                      "H2 falsified / not claimable — " + "; ".join(failed))
+
     examples = {}
     qtext = {r["qid"]: r["question"] for t in bank for r in bank[t]}
-    for q in ("hopeful", "suppressed"):
+    for q in ("performative_certainty", "excessive_hedging"):
         sel = merged[merged.quadrant == q].head(25)
         examples[q] = [{"model": r.model, "tier": r.tier, "qid": r.qid,
                         "question": qtext.get(r.qid, ""), "verbal": round(float(r.verbal_cal), 3),
@@ -2781,38 +3554,112 @@ def omniscience_index(graded: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def test_h3_base_vs_instruct(signals: pd.DataFrame, abst: dict, cfg: Config) -> dict:
-    """PLAN §13 H3 / Gate 4 — hopeful-confidence delta with missed-knowledge guard."""
-    a, b = "qwen2.5-7b-base", "qwen2.5-7b-instruct"
+def h3_model_pair() -> tuple[str | None, str | None]:
+    """Discover the (base, instruct) comparison pair from MODEL_SPECS rung
+    tags instead of hardcoding qwen2.5 names — the ladder is now Qwen 3.5."""
+    bases = [m for m, s in MODEL_SPECS.items() if s.get("rung") == "h3-comparison"]
+    best = None
+    for b in bases:
+        stem = b.rsplit("-", 1)[0]
+        inst = [m for m, s in MODEL_SPECS.items()
+                if m.startswith(stem) and s.get("chat") and s.get("rung") == "ladder"]
+        if not inst:
+            continue
+        i = max(inst, key=lambda m: MODEL_SPECS[m]["params_b"])
+        if best is None or MODEL_SPECS[i]["params_b"] > MODEL_SPECS[best[1]]["params_b"]:
+            best = (b, i)
+    return best if best else (None, None)
+
+
+def test_h3_base_vs_instruct(signals: pd.DataFrame, abst: dict, cfg: Config,
+                             gate4_elicit_ok: bool | None = None) -> dict:
+    """PLAN §13 H3 / Gate 4 — stated-confidence overstatement delta between the
+    base and instruction-tuned models, with a missed-knowledge guard.
+
+    Audit fixes:
+      * NaN coercion bug: `((v>=thr)&(o<thr)).astype(float)` silently turned
+        rows with missing verbal/other scores into artificial 0.0 (comparisons
+        on NaN are False), which is what manufactured hopeful_rate_base = 0.0.
+        Rows without the required scores are now excluded BEFORE the indicator
+        is built and never enter the rates.
+      * `hopeful` is NOT equated with 'confident and wrong': its correctness
+        rate and the confident-incorrect rate are reported separately.
+      * Terminology: outputs use the neutral taxonomy label 'unwarranted
+        stated confidence' (Performative Certainty); legacy keys are kept as
+        deprecated aliases so old readers don't break."""
+    a, b = h3_model_pair()
+    if a is None or b is None:
+        r = {"available": False, "verdict": "H3 untested — no base/instruct pair in MODEL_SPECS"}
+        json_write(PATHS["derived"] / "h3_model_delta.json", r)
+        return r
     test = signals[(signals.split == "test") & signals.model.isin([a, b])].copy()
     if test.model.nunique() < 2:
-        r = {"available": False, "verdict": "H3 untested — both 7B variants required"}
+        r = {"available": False, "verdict": f"H3 untested — both {a} and {b} required"}
         json_write(PATHS["derived"] / "h3_model_delta.json", r)
         return r
     thr = cfg.QUADRANT_THRESHOLD
     test["other_cal"] = test[["behavioral_cal", "internal_cal"]].mean(axis=1, skipna=True)
-    test["hopeful"] = ((test.verbal_cal >= thr) & (test.other_cal < thr)).astype(float)
+    # Exclude rows missing verbal OR all other-signal scores BEFORE building
+    # the binary indicator; NaN-safe via np.where (never coerce to 0.0).
+    valid = test["verbal_cal"].notna() & test["other_cal"].notna()
+    test["unwarranted"] = np.where(
+        valid, ((test["verbal_cal"] >= thr) & (test["other_cal"] < thr)).astype(float), np.nan)
     shared = set(test[test.model == a].qid) & set(test[test.model == b].qid)
     test = test[test.qid.isin(shared)]
-    xa = test[test.model == a]["hopeful"].dropna().values
-    xb = test[test.model == b]["hopeful"].dropna().values
+    xa = test[test.model == a]["unwarranted"].dropna().values
+    xb = test[test.model == b]["unwarranted"].dropna().values
     delta = bootstrap_diff_ci(xa, xb, np.mean, cfg.N_BOOTSTRAP, cfg.BOOTSTRAP_CI, cfg.SEED)
+
+    def _rate(g: pd.DataFrame, col: str) -> float:
+        d = g[col].dropna()
+        return float(d.mean()) if len(d) else float("nan")
+
+    corr_rates, conf_wrong, hop_corr = {}, {}, {}
+    for name, m in (("base", a), ("instruct", b)):
+        gm = test[test.model == m]
+        corr_rates[name] = _rate(gm, "correct")
+        vw = gm[(gm.verbal_cal >= thr)]
+        conf_wrong[name] = float((vw["correct"] == 0).mean()) if len(vw) else float("nan")
+        hu = gm[gm["unwarranted"] == 1.0]
+        hop_corr[name] = float(hu["correct"].mean()) if len(hu) else float("nan")
+
     mk = {m: np.mean([v["missed_knowledge_rate"] for k, v in abst.get("per_cell", {}).items()
                       if k.startswith(m)] or [np.nan]) for m in (a, b)}
     mk_rise = float(mk[b] - mk[a]) if all(np.isfinite(list(mk.values()))) else float("nan")
     guard_ok = bool(not np.isfinite(mk_rise) or mk_rise < delta["delta"])
-    out = {"available": True, "n_matched": int(len(shared)),
-           "hopeful_rate_base": float(np.mean(xa)) if xa.size else np.nan,
-           "hopeful_rate_instruct": float(np.mean(xb)) if xb.size else np.nan,
+    out = {"available": True, "model_base": a, "model_instruct": b,
+           "n_matched": int(len(shared)),
+           "n_scored": {"base": int(xa.size), "instruct": int(xb.size)},
+           "excluded_missing_scores": int((~valid).sum()),
+           "unwarranted_confidence_rate": {"base": float(np.mean(xa)) if xa.size else float("nan"),
+                                           "instruct": float(np.mean(xb)) if xb.size else float("nan")},
            "delta_base_minus_instruct": delta,
+           # Correctness decomposition — overstatement ≠ being wrong.
+           "hopeful_rows_correct_rate": {k: (None if not np.isfinite(v) else round(v, 4))
+                                         for k, v in hop_corr.items()},
+           "confident_incorrect_rate": {k: (None if not np.isfinite(v) else round(v, 4))
+                                        for k, v in conf_wrong.items()},
+           "overall_correct_rate": {k: (None if not np.isfinite(v) else round(v, 4))
+                                    for k, v in corr_rates.items()},
            "missed_knowledge_rate": {k: (None if not np.isfinite(v) else float(v)) for k, v in mk.items()},
-           "missed_knowledge_rise": mk_rise, "guard_passes": guard_ok,
-           "h3_pass": bool(delta["lo"] > 0 and guard_ok)}
-    out["verdict"] = ("H3 supported — instruction tuning lowers hopeful confidence without blanket hedging"
-                      if out["h3_pass"] else
-                      "H3 falsified / null — delta CI includes 0 or the missed-knowledge guard fired")
+           "missed_knowledge_rise": mk_rise, "guard_passes": guard_ok}
+    replicates = bool(delta["lo"] > 0 and guard_ok
+                      and (gate4_elicit_ok is None or gate4_elicit_ok))
+    out["guard_note"] = ("If this delta replicates after the NaN repair it should be framed as a "
+                         "descriptive trade-off of instruction tuning in THIS evaluation setting, "
+                         "not as a general 'hopeful confidence' claim.")
+    out["h3_pass"] = replicates
+    out["verdict"] = ("H3 supported — instruction tuning lowers unwarranted stated confidence "
+                      "without blanket hedging"
+                      if replicates else
+                      "H3 falsified / null — delta CI includes 0, the missed-knowledge guard fired, "
+                      "or base-model elicitation did not meet the usability bar")
+    # Deprecated aliases (v2 readers).
+    out["hopeful_rate_base"] = out["unwarranted_confidence_rate"]["base"]
+    out["hopeful_rate_instruct"] = out["unwarranted_confidence_rate"]["instruct"]
     json_write(PATHS["derived"] / "h3_model_delta.json", out)
-    LOG.log("h3", pass_=out["h3_pass"], delta=round(delta["delta"], 4))
+    LOG.log("h3", pass_=out["h3_pass"], delta=round(delta["delta"], 4),
+            n_scored=f"{xa.size}/{xb.size}")
     return out
 
 
@@ -2857,10 +3704,13 @@ def test_h4_depth(sweep: pd.DataFrame, cfg: Config) -> dict:
     return out
 
 
-def hierarchical_regression(signals: pd.DataFrame, cfg: Config) -> dict:
+def hierarchical_regression(signals: pd.DataFrame, cfg: Config,
+                            feats: pd.DataFrame | None = None) -> dict:
     """PLAN §8·4 — ONE pooled model across the grid, not 30 per-cell fits.
-    Question-level random effects via BinomialBayesMixedGLM; falls back to a
-    logit with cluster-robust SEs when that does not converge."""
+    Audit upgrade (finding 5 / Priority-3 #10): questions nested in tiers and
+    models via random intercepts for question, model, tier AND model×tier, so
+    cell baselines are absorbed instead of cells being deleted. Question
+    characteristics enter as FIXED effects when a feature table is supplied."""
     import statsmodels.api as sm
     import statsmodels.formula.api as smf
 
@@ -2868,21 +3718,34 @@ def hierarchical_regression(signals: pd.DataFrame, cfg: Config) -> dict:
     d = d.dropna(subset=["verbal_cal", "correct"])
     for c in ("behavioral_cal", "internal_cal"):
         d[c] = d[c].fillna(d[c].mean())
+    if feats is not None and len(feats):
+        d = d.merge(feats.drop(columns=["family"], errors="ignore"),
+                    on=["tier", "qid"], how="left")
+        for c in ("is_long", "has_number", "has_multi_entity"):
+            if c in d:
+                d[c] = d[c].fillna(0).astype(int)
     if len(d) < 50:
         return {"available": False, "n": int(len(d)), "reason": "insufficient test rows"}
-    d["log_params"] = np.log(d["params_b"])
+    d["log_params"] = np.log(d["params_b"].clip(lower=0.01))
     d["layer_pct"] = d.get("best_layer_pct", pd.Series(np.nan, index=d.index)).fillna(50.0)
     d["is_reasoning"] = (d["family"] == "reasoning").astype(int)
-    formula = ("correct ~ verbal_cal + behavioral_cal + internal_cal + is_reasoning + log_params"
-               " + is_reasoning:internal_cal + log_params:internal_cal + layer_pct:is_reasoning")
+    d["model_x_tier"] = d["model"] + "__" + d["tier"]
+    fixed = ("correct ~ verbal_cal + behavioral_cal + internal_cal + is_reasoning + log_params"
+             " + is_reasoning:internal_cal + log_params:internal_cal + layer_pct:is_reasoning")
+    if {"is_long", "has_number"}.issubset(d.columns):
+        fixed += " + is_long + has_number"
+    formula = fixed
     out: dict[str, Any] = {"available": True, "n": int(len(d)), "formula": formula}
     method = cfg.HLR_METHOD
     if method in ("auto", "bayes_mixed"):
         try:
             from statsmodels.genmod.bayes_mixed_glm import BinomialBayesMixedGLM
-            m = BinomialBayesMixedGLM.from_formula(formula, {"question": "0 + C(qid)"}, d)
+            vocs = {"question": "0 + C(qid)", "model": "0 + C(model)",
+                    "tier": "0 + C(tier)", "cell": "0 + C(model_x_tier)"}
+            m = BinomialBayesMixedGLM.from_formula(formula, vocs, d)
             r = m.fit_vb(verbose=False)
             out.update(method="bayes_mixed_glm",
+                       random_effects=list(vocs),
                        params=dict(zip(r.model.exog_names, [float(x) for x in r.fe_mean])),
                        sd=dict(zip(r.model.exog_names, [float(x) for x in r.fe_sd])))
             json_write(PATHS["derived"] / "hierarchical_regression.json", out)
@@ -2890,7 +3753,8 @@ def hierarchical_regression(signals: pd.DataFrame, cfg: Config) -> dict:
         except Exception as exc:                          # noqa: BLE001
             out["bayes_error"] = str(exc)[:200]
     try:
-        m = smf.logit(formula, data=d).fit(disp=0, cov_type="cluster", cov_kwds={"groups": d["qid"]})
+        m = smf.logit(formula, data=d).fit(disp=0, cov_type="cluster",
+                                           cov_kwds={"groups": d["model_x_tier"]})
         out.update(method="logit_cluster_robust",
                    params={k: float(v) for k, v in m.params.items()},
                    pvalues={k: float(v) for k, v in m.pvalues.items()},
@@ -2922,6 +3786,80 @@ def correlation_table(signals: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     if len(df):
         df.to_parquet(PATHS["derived"] / "correlations.parquet", index=False)
     return df
+
+
+def popularity_contrast(signals: pd.DataFrame, cfg: Config) -> dict:
+    """Audit recovery task: the popularity manipulation (R1 PopQA-high vs
+    R2 PopQA-low) is the design's most distinctive feature and was never
+    analyzed while R2 was deleted by the band filter. With all cells committed
+    this contrasts per-signal raw scores and correctness between R1 and R2
+    within each model, on matched test rows."""
+    out = {"per_model": {}}
+    test = signals[signals.split == "test"]
+    tiers = [t for t in ("R1", "R2") if t in set(test["tier"])]
+    if len(tiers) < 2:
+        return {"available": False, "reason": "need both R1 and R2 committed"}
+    for model, g in test.groupby("model"):
+        hi = g[g.tier == "R1"]
+        lo = g[g.tier == "R2"]
+        entry = {"n": {"R1": int(len(hi)), "R2": int(len(lo))}}
+        for sig in SIGNALS:
+            a = hi[f"{sig}_raw"].dropna()
+            b = lo[f"{sig}_raw"].dropna()
+            if len(a) > 5 and len(b) > 5:
+                sp = spearman_with_ci(
+                    pd.concat([a, b]).values,
+                    np.concatenate([np.ones(len(a)), np.zeros(len(b))]),
+                    min(cfg.N_BOOTSTRAP, 500), cfg.BOOTSTRAP_CI, cfg.SEED)
+                entry[sig] = {"mean_R1": float(a.mean()), "mean_R2": float(b.mean()),
+                              "diff_auc_rho": round(sp["rho"], 4)}
+        ca, cb = hi["correct"].astype(float), lo["correct"].astype(float)
+        entry["accuracy"] = {"R1": round(float(ca.mean()), 4), "R2": round(float(cb.mean()), 4)}
+        out["per_model"][model] = entry
+    out["available"] = True
+    json_write(PATHS["derived"] / "popularity_gradient.json", out)
+    LOG.log("popularity_gradient", models=len(out["per_model"]))
+    return out
+
+
+def difficulty_matched_view(signals: pd.DataFrame, graded: pd.DataFrame,
+                            cfg: Config, n_bins: int = 4) -> dict:
+    """Base-rate control BY MATCHING instead of deletion (audit fix §9).
+
+    Questions are stratified into difficulty bins from their cross-model mean
+    FORCED-answer accuracy within tier; per-bin ECE/resolution are then
+    computed per signal so cross-signal comparisons contrast models on the
+    SAME difficulty profile rather than on different accuracy mixes."""
+    forced = graded[(graded.variant == "FORCED") & (graded.split == "test")]
+    if not len(forced):
+        return {"available": False, "reason": "no FORCED rows"}
+    diff = (forced.groupby(["tier", "qid"])["correct"].mean()
+            .rename("difficulty").reset_index())
+    diff["difficulty_bin"] = diff.groupby("tier")["difficulty"].transform(
+        lambda s: pd.qcut(s, q=min(n_bins, max(2, s.nunique())), labels=False,
+                          duplicates="drop"))
+    d = signals[signals.split == "test"].merge(diff[["tier", "qid", "difficulty_bin"]],
+                                               on=["tier", "qid"], how="inner")
+    bins = sorted(x for x in d["difficulty_bin"].unique() if pd.notna(x))
+    out = {"n_bins": len(bins), "bins": {}}
+    for b in bins:
+        db = d[d.difficulty_bin == b]
+        entry = {"n": int(len(db)),
+                 "accuracy": round(float(db["correct"].astype(float).mean()), 4)}
+        for sig in SIGNALS:
+            dd = db[[f"{sig}_cal", "correct"]].dropna()
+            if len(dd) < 20:
+                continue
+            p, y = dd[f"{sig}_cal"].values, dd["correct"].values.astype(float)
+            entry[sig] = {"ece": ece(p, y, cfg.ECE_BINS),
+                          **{k: round(v, 5) for k, v in murphy_decomposition(
+                              p, y, cfg.MURPHY_BINS).items() if k in ("resolution", "reliability")}}
+        out["bins"][int(b)] = entry
+    out["available"] = bool(any("verbal" in v or "behavioral" in v or "internal" in v
+                                for v in out["bins"].values()))
+    json_write(PATHS["derived"] / "difficulty_matched.json", out)
+    LOG.log("difficulty_matched", bins=out["n_bins"], available=out["available"])
+    return out
 # %%
 # ============================================================================
 # CELL 18 — post-hoc LLM judge (optional AUDIT layer, runs last)
@@ -3117,7 +4055,23 @@ def stage_judge(bank: dict, graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) 
 def export_manual_check_sheet(bank: dict, graded: pd.DataFrame, cfg: Config) -> Path:
     """Gate 1 needs HUMAN verification of 50–100 items per grader family
     (PLAN §3, §16). This writes the sheet to hand-label; the judge above is an
-    additional automated opinion, not a replacement for it."""
+    additional automated opinion, not a replacement for it.
+
+    Audit fix (finding 8): a fresh run used to clobber the HUMAN-ANNOTATED
+    sheet with a blank template (manual_correct was reset to empty in every
+    result tree). If the sheet on disk already carries labels, it is preserved
+    untouched and re-ingested into the final report instead."""
+    p = PATHS["tables"] / "gate1_manual_check_sheet.csv"
+    if p.exists():
+        try:
+            old = pd.read_csv(p)
+            if "manual_correct" in old.columns and old["manual_correct"].notna().any():
+                LOG.log("manual_sheet_preserved", path=str(p),
+                        rows=int(len(old)),
+                        filled=int(old["manual_correct"].notna().sum()))
+                return p
+        except Exception:                                  # noqa: BLE001
+            pass
     qtext = {r["qid"]: r["question"] for t in bank for r in bank[t]}
     rng = np.random.default_rng(cfg.SEED)
     rows = []
@@ -3129,10 +4083,45 @@ def export_manual_check_sheet(bank: dict, graded: pd.DataFrame, cfg: Config) -> 
                              automated_correct=bool(r.correct), grader=r.grader,
                              manual_correct="", disagreement_note=""))
     df = pd.DataFrame(rows)
-    p = PATHS["tables"] / "gate1_manual_check_sheet.csv"
     df.to_csv(p, index=False)
     LOG.log("manual_sheet", path=str(p), rows=len(df))
     return p
+
+
+def ingest_manual_sheet(cfg: Config) -> dict:
+    """Read back a human-filled Gate 1 check sheet and compute the agreement
+    statistics that close Gate 1 (audit fix: the filled sheet was never
+    ingested; PLAN §16 requires the manual agreement rate in the report)."""
+    p = PATHS["tables"] / "gate1_manual_check_sheet.csv"
+    if not p.exists():
+        return {"available": False, "reason": "sheet not found"}
+    try:
+        df = pd.read_csv(p)
+    except Exception as exc:                               # noqa: BLE001
+        return {"available": False, "reason": str(exc)[:120]}
+    if "manual_correct" not in df.columns or not df["manual_correct"].notna().any():
+        return {"available": False, "reason": "no manual labels yet",
+                "path": str(p)}
+    d = df[df["manual_correct"].notna()].copy()
+    d["manual_correct"] = d["manual_correct"].astype(str).str.strip().str.lower() \
+        .map({"true": True, "false": False, "1": True, "0": False})
+    d = d[d["manual_correct"].notna()]
+    agree = float((d["manual_correct"] == d["automated_correct"].astype(bool)).mean()) \
+        if len(d) else float("nan")
+    by_grader = {str(k): round(float((g["manual_correct"] == g["automated_correct"].astype(bool)).mean()), 4)
+                 for k, g in d.groupby("grader")} if len(d) else {}
+    res = {
+        "available": True, "n_filled": int(len(d)), "n_total": int(len(df)),
+        "agreement": round(agree, 4) if np.isfinite(agree) else None,
+        "agreement_by_grader": by_grader,
+        "gate1_threshold": cfg.GATE1_AGREEMENT,
+        "gate1_manual_pass": bool(np.isfinite(agree) and agree >= cfg.GATE1_AGREEMENT),
+        "disagreements": int((d["manual_correct"] != d["automated_correct"].astype(bool)).sum()),
+    }
+    json_write(PATHS["derived"] / "gate1_manual.json", res)
+    LOG.log("gate1_manual", n=res["n_filled"], agreement=res["agreement"],
+            pass_=res["gate1_manual_pass"])
+    return res
 # %%
 # ============================================================================
 # CELL 19 — figures (PLAN §15, Figures 1–4 + supplementary)
@@ -3155,7 +4144,10 @@ CMAP_DIV = LinearSegmentedColormap.from_list("div_br", DIVERGING)
 # Fixed slot per tier so a filtered chart never repaints the survivors.
 TIER_COLOR = {t: PALETTE[i] for i, t in enumerate(TIER_SPECS)}
 SIGNAL_COLOR = {"verbal": PALETTE[0], "behavioral": PALETTE[1], "internal": PALETTE[2]}
-QUADRANT_COLOR = {"hopeful": PALETTE[0], "suppressed": PALETTE[1],
+QUADRANT_COLOR = {"performative_certainty": PALETTE[0], "excessive_hedging": PALETTE[1],
+                  "grounded_certainty": "#c9c8c2", "honest_doubt": "#e6e5e1",
+                  # legacy names kept so old quadrant parquets still render
+                  "hopeful": PALETTE[0], "suppressed": PALETTE[1],
                   "agree_high": "#c9c8c2", "agree_low": "#e6e5e1"}
 
 
@@ -3274,15 +4266,18 @@ def fig2_quadrant(cfg: Config, abst: dict) -> None:
     thr = cfg.QUADRANT_THRESHOLD
     ax.axvline(thr, color=GRID, lw=1.0, zorder=1)
     ax.axhline(thr, color=GRID, lw=1.0, zorder=1)
-    for name in ("agree_low", "agree_high", "suppressed", "hopeful"):   # mismatches drawn on top
+    for name in ("honest_doubt", "grounded_certainty", "excessive_hedging",
+                 "performative_certainty"):   # mismatches drawn on top
         s = q[q.quadrant == name]
         if not len(s):
             continue
         ax.scatter(s["verbal_cal"], s["other_cal"], s=13, color=QUADRANT_COLOR[name],
-                   edgecolors=SURFACE, linewidths=0.5, alpha=0.85, zorder=3 if "agree" not in name else 2,
-                   label=f"{name} (n={len(s)})")
+                   edgecolors=SURFACE, linewidths=0.5, alpha=0.85,
+                   zorder=3 if name in ("performative_certainty", "excessive_hedging") else 2,
+                   label=f"{name.replace('_', ' ')} (n={len(s)})")
     ax.set(xlabel="calibrated verbalized confidence", ylabel="calibrated behavioral / internal",
-           xlim=(-0.02, 1.02), ylim=(-0.02, 1.02), title="Signal mismatch quadrants (test split)")
+           xlim=(-0.02, 1.02), ylim=(-0.02, 1.02),
+           title="Epistemic alignment quadrants (test split)")
     ax.legend(loc="lower right", markerscale=1.4)
 
     ax2 = axes[1]
@@ -3298,27 +4293,31 @@ def fig2_quadrant(cfg: Config, abst: dict) -> None:
     ax2.grid(axis="y", visible=False)
     fig.tight_layout()
     save_fig(fig, "fig2_quadrant", cfg,
-             "Figure 2 — quadrant plot of calibrated verbal vs behavioral/internal with the "
-             "abstention split. Predicted under H2: hopeful and suppressed quadrants cluster by "
-             "question type. Null: uniform scatter, no clustering.")
+             "Figure 2 — epistemic alignment quadrants of calibrated verbal vs "
+             "behavioral/internal (performative certainty / excessive hedging / grounded "
+             "certainty / honest doubt) with the abstention split. Predicted under H2: the "
+             "mismatch quadrants cluster by question type across multiple cells. "
+             "Null: uniform scatter, no replicated clustering.")
 
 
 def fig3_model_delta(h3: dict, cfg: Config) -> None:
-    """Figure 3 — base vs Instruct: hopeful rate and missed-knowledge rate."""
+    """Figure 3 — base vs Instruct: unwarranted stated-confidence rate and
+    missed-knowledge rate (neutral terminology per audit reframing)."""
     apply_style(cfg)
     if not h3.get("available"):
         return
-    apply_style(cfg)
     fig, ax = plt.subplots(figsize=(cfg.FIG_WIDTH * 0.62, cfg.FIG_WIDTH * 0.42))
-    groups = ["hopeful confidence", "missed knowledge"]
-    base = [h3.get("hopeful_rate_base", np.nan),
-            (h3.get("missed_knowledge_rate", {}) or {}).get("qwen2.5-7b-base", np.nan)]
-    inst = [h3.get("hopeful_rate_instruct", np.nan),
-            (h3.get("missed_knowledge_rate", {}) or {}).get("qwen2.5-7b-instruct", np.nan)]
+    groups = ["unwarranted stated confidence", "missed knowledge"]
+    a_name = str(h3.get("model_base", "base"))
+    b_name = str(h3.get("model_instruct", "instruct"))
+    base = [h3.get("unwarranted_confidence_rate", {}).get("base", np.nan),
+            (h3.get("missed_knowledge_rate", {}) or {}).get(a_name, np.nan)]
+    inst = [h3.get("unwarranted_confidence_rate", {}).get("instruct", np.nan),
+            (h3.get("missed_knowledge_rate", {}) or {}).get(b_name, np.nan)]
     x = np.arange(len(groups))
     w = 0.34
-    ax.bar(x - w / 2, base, w * 0.94, color=PALETTE[0], edgecolor=SURFACE, linewidth=1.4, label="7B base")
-    ax.bar(x + w / 2, inst, w * 0.94, color=PALETTE[1], edgecolor=SURFACE, linewidth=1.4, label="7B Instruct")
+    ax.bar(x - w / 2, base, w * 0.94, color=PALETTE[0], edgecolor=SURFACE, linewidth=1.4, label=f"{a_name} (base)")
+    ax.bar(x + w / 2, inst, w * 0.94, color=PALETTE[1], edgecolor=SURFACE, linewidth=1.4, label=f"{b_name} (instruct)")
     d = h3.get("delta_base_minus_instruct", {})
     if np.isfinite(d.get("lo", np.nan)):
         ax.errorbar(x[0], base[0], yerr=[[max(base[0] - (inst[0] + d["lo"]), 0)],
@@ -3334,9 +4333,10 @@ def fig3_model_delta(h3: dict, cfg: Config) -> None:
     ax.legend(loc="upper right")
     fig.tight_layout()
     save_fig(fig, "fig3_model_delta", cfg,
-             "Figure 3 — hopeful-confidence and missed-knowledge rates, Qwen2.5-7B base vs "
-             "Instruct. Predicted under H3: hopeful rate drops without a matched rise in missed "
-             "knowledge. Null: overlapping bars / equal rates.")
+             f"Figure 3 — unwarranted stated-confidence (high verbal / low behavioral-internal) "
+             f"and missed-knowledge rates, {a_name} vs {b_name}. Predicted under H3: the "
+             f"overstatement rate drops without a matched rise in missed knowledge. "
+             f"Null: overlapping bars / equal rates.")
 
 
 def fig4_depth_curves(sweep: pd.DataFrame, cfg: Config) -> None:
@@ -3366,7 +4366,7 @@ def fig4_depth_curves(sweep: pd.DataFrame, cfg: Config) -> None:
                 ax.fill_between(t["layer_pct"], 0.5, t["auroc_null_p95"],
                                 color=GRID, alpha=0.55, lw=0, zorder=1)
         ax.set(xlabel="layer percentile", xticks=list(cfg.PERCENTILES), ylim=(0.35, 1.0),
-               title=f"{model.replace('qwen2.5-', '').replace('-instruct', '')}"
+                title=f"{re.sub(r'qwen[\\d.]+-', '', model).replace('-instruct', '')}"
                      f" ({MODEL_SPECS[model]['params_b']:.1f}B)")
         if k == 0:
             ax.set_ylabel("probe AUROC (calibration split)")
@@ -3412,9 +4412,9 @@ def fig5_accuracy_grid(commitments: dict, cfg: Config) -> None:
     ax.set_xticks(range(len(tiers)))
     ax.set_xticklabels([f"{t}\n{TIER_SPECS[t]['family'][:4]}" for t in tiers])
     ax.set_yticks(range(len(models)))
-    ax.set_yticklabels([m.replace("qwen2.5-", "") for m in models])
-    ax.set_title(f"Pilot accuracy per cell (bold = committed; dotted = outside "
-                 f"{cfg.ACCURACY_BAND[0]:.0%}–{cfg.ACCURACY_BAND[1]:.0%} band)")
+    ax.set_yticklabels([re.sub(r"qwen[\d.]+-", "", m) for m in models])
+    ax.set_title(f"Pilot accuracy per cell (all committed; shading = outside "
+                 f"{cfg.ACCURACY_BAND[0]:.0%}–{cfg.ACCURACY_BAND[1]:.0%} band, kept for matching)")
     ax.grid(visible=False)
     fig.colorbar(im, ax=ax, label="pilot accuracy", fraction=0.035, pad=0.02)
     fig.tight_layout()
@@ -3435,7 +4435,7 @@ def fig6_correlations(corr: pd.DataFrame, cfg: Config) -> None:
     ax.set_xticks(range(piv.shape[1]))
     ax.set_xticklabels(piv.columns, rotation=20, ha="right")
     ax.set_yticks(range(piv.shape[0]))
-    ax.set_yticklabels([f"{m.replace('qwen2.5-', '')}·{t}" for m, t in piv.index], fontsize=6.8)
+    ax.set_yticklabels([f"{re.sub(r'qwen[\\d.]+-', '', m)}·{t}" for m, t in piv.index], fontsize=6.8)
     for i in range(piv.shape[0]):
         for j in range(piv.shape[1]):
             v = piv.values[i, j]
@@ -3558,7 +4558,7 @@ def stage_tables(bank: dict, graded: pd.DataFrame, signals: pd.DataFrame, sweep:
     export_table(pd.DataFrame([
         dict(hypothesis="H0", gate="Gate 2", passed=h0.get("gate2_pass"), verdict=h0.get("verdict")),
         dict(hypothesis="H1", gate="—", passed=h1.get("h1_pass"), verdict=h1.get("verdict")),
-        dict(hypothesis="H2", gate="Gate 1", passed=h2.get("h2_pass"), verdict=h2.get("verdict")),
+        dict(hypothesis="H2", gate="Gate 1+3", passed=h2.get("h2_pass"), verdict=h2.get("verdict")),
         dict(hypothesis="H3", gate="Gate 4", passed=h3.get("h3_pass"), verdict=h3.get("verdict")),
         dict(hypothesis="H4", gate="Gate 3", passed=h4.get("h4_pass"), verdict=h4.get("verdict")),
     ]), "t15_hypothesis_verdicts", cfg, "Pre-registered hypothesis verdicts.")
@@ -3585,16 +4585,115 @@ def compute_ledger(cfg: Config) -> pd.DataFrame:
     return df
 
 
+def verify_model_specs(cfg: Config) -> dict:
+    """Audit task (Model Family Configuration), AUTOMATED: download each active
+    checkpoint's config.json (cheap, no weights), read the TEXT stack's
+    num_hidden_layers / hidden_size, and compare with MODEL_SPECS. Any drift is
+    corrected IN PLACE and logged loudly — percentile_layers() taps layer
+    indices derived from `layers`, so a stale value would silently probe the
+    wrong depths. Fails hard only when a config cannot be fetched at all."""
+    res = {}
+    for name in cfg.active_models():
+        spec = MODEL_SPECS[name]
+        entry = {"hf_id": spec["hf_id"]}
+        try:
+            ac = AutoConfig.from_pretrained(spec["hf_id"], trust_remote_code=False)
+            tc = getattr(ac, "text_config", ac)
+            real_layers = int(getattr(tc, "num_hidden_layers", -1))
+            real_hidden = int(getattr(tc, "hidden_size", -1))
+            entry.update(real_layers=real_layers, real_hidden=real_hidden,
+                         spec_layers=spec["layers"], spec_hidden=spec["hidden"])
+            drift = []
+            if real_layers > 0 and spec["layers"] != real_layers:
+                LOG.log("model_spec_corrected", model=name, field="layers",
+                        was=spec["layers"], now=real_layers)
+                spec["layers"] = real_layers
+                drift.append("layers")
+            if real_hidden > 0 and spec["hidden"] != real_hidden:
+                LOG.log("model_spec_corrected", model=name, field="hidden",
+                        was=spec["hidden"], now=real_hidden)
+                spec["hidden"] = real_hidden
+                drift.append("hidden")
+            entry["drift_corrected"] = drift
+            entry["ok"] = True
+            LOG.log("model_spec_verified" if not drift else "model_spec_drift_fixed",
+                    model=name, layers=real_layers, hidden=real_hidden)
+        except Exception as exc:                           # noqa: BLE001
+            entry["ok"] = False
+            entry["error"] = str(exc)[:200]
+            LOG.log("model_spec_verify_failed", model=name, error=entry["error"])
+        res[name] = entry
+    bad = [k for k, v in res.items() if not v.get("ok")]
+    json_write(PATHS["derived"] / "model_spec_verification.json", res)
+    if bad:
+        raise RuntimeError(
+            f"could not fetch configs for: {bad} — fix hf_ids or network before running; "
+            f"tapping activations against unverified layer counts risks silent wrong-layer probes")
+    return res
+
+
+def validate_chat_templates(cfg: Config) -> dict:
+    """Audit task (Model Family Configuration): render every ladder rung's chat
+    template ONCE before any generation, verifying (a) apply_chat_template
+    works, (b) every instruct rung ends with the same assistant trigger so the
+    prompt-ending token — which activations tap — is consistent, and (c) base
+    models are flagged few-shot. Cheap: tokenizer-only, no weights."""
+    res = {}
+    endings = {}
+    for name in cfg.active_models():
+        spec = MODEL_SPECS[name]
+        entry = {"hf_id": spec["hf_id"], "chat": bool(spec["chat"])}
+        try:
+            tok = AutoTokenizer.from_pretrained(spec["hf_id"], trust_remote_code=False)
+            if spec["chat"]:
+                msgs = [{"role": "system", "content": "t"}, {"role": "user", "content": "q"}]
+                rendered = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+                entry["renders"] = True
+                entry["endswith"] = rendered[-24:]
+                endings[name] = rendered[-24:]
+            else:
+                entry["renders"] = None
+                entry["note"] = "base model — few-shot prompts, no chat template"
+            LOG.log("chat_template_ok" if (not spec["chat"] or entry.get("renders"))
+                    else "chat_template_failed", model=name)
+        except Exception as exc:                           # noqa: BLE001
+            entry["renders"] = False
+            entry["error"] = str(exc)[:200]
+            LOG.log("chat_template_failed", model=name, error=entry["error"])
+        res[name] = entry
+    distinct = set(endings.values())
+    if len(distinct) > 1:
+        LOG.log("prompt_ending_inconsistent", endings=endings,
+                note="instruct rungs end with DIFFERENT assistant triggers — "
+                     "the tapped prompt-ending token would not be constant")
+    res["_consistent_prompt_ending"] = len(distinct) <= 1
+    json_write(PATHS["derived"] / "chat_template_validation.json",
+               {k: v for k, v in res.items()})
+    return res
+
+
 def stage_report(bank: dict, commitments: dict, h0: dict, h1: dict, h2: dict, h3: dict,
-                 h4: dict, gate3: dict, judge: dict, sanity: dict, hlr: dict, cfg: Config) -> dict:
+                 h4: dict, gate3: dict, judge: dict, sanity: dict, hlr: dict,
+                 manual_sheet: dict, cfg: Config) -> dict:
     ledger = compute_ledger(cfg)
     total_h = float(ledger["gpu_hours"].sum()) if len(ledger) else 0.0
     committed = [k for k, v in commitments.items() if v["committed"]]
+    # Gate 1 closes only with BOTH opinions: automated judge agreement AND the
+    # human check sheet (audit fix — Gate 1 was `null`/assumed-passed while the
+    # sheet sat unfilled).
+    auto_ok = judge.get("gate1_pass")
+    manual_ok = manual_sheet.get("gate1_manual_pass") if manual_sheet.get("available") else None
+    gate1_combined = None if (auto_ok is None and manual_ok is None) \
+        else bool(auto_ok is not False and manual_ok is not False)
     gates = {
         "gate1_grading_sanity": {
-            "pass": judge.get("gate1_pass"),
+            "pass": gate1_combined,
             "automated_agreement": judge.get("agreement_overall"),
-            "note": "Requires the manual check sheet to be filled in to close fully (PLAN §16).",
+            "manual_agreement": manual_sheet.get("agreement"),
+            "manual_filled": f"{manual_sheet.get('n_filled', 0)}/{manual_sheet.get('n_total', 0)}"
+                             if manual_sheet.get("available") else "0/0",
+            "note": ("Requires BOTH the judge agreement and the human check sheet to clear "
+                     "the threshold (PLAN §16)."),
         },
         "gate2_format_agreement": {"pass": h0.get("gate2_pass"),
                                    "min_lower_ci": min([v["lo"] for v in h0.get("pairs", {}).values()
@@ -3627,14 +4726,21 @@ def stage_report(bank: dict, commitments: dict, h0: dict, h1: dict, h2: dict, h3
     }
     json_write(PATHS["meta"] / "final_report.json", report)
 
-    # §17.2 run-log row, ready to paste into PLAN.md
+    # §17.2 run-log row, ready to paste into PLAN.md — now carries full
+    # provenance (audit fix: the log was empty and runs recorded "nogit").
     lines = ["| Run-log ID | What it did | Outcome | Headline |", "|---|---|---|---|"]
+    prov_line = (f"| {cfg.RUN_NAME}_provenance | code_sha={PROV.get('code_sha')} "
+                 f"config={cfg.hash()} platform={cfg.resolved_platform()} seed={cfg.SEED} "
+                 f"gpu_h={round(total_h, 2)} cells={len(committed)}/{len(commitments)} "
+                 f"finished={report['finished_utc']} | metadata | — |")
+    lines.append(prov_line)
     for hid, verdict in report["hypotheses"].items():
         if verdict:
-            lines.append(f"| {cfg.RUN_NAME}_{hid} | {hid} per PLAN §13 | "
+            lines.append(f"| {cfg.RUN_NAME}_{hid} | {hid} per PLAN §13 @ {PROV.get('code_sha')} | "
                          f"{'pass' if 'supported' in str(verdict) else 'null/falsified'} | {verdict} |")
     (PATHS["meta"] / "run_log_rows.md").write_text("\n".join(lines))
-    LOG.log("report_written", cells_committed=len(committed), gpu_hours=round(total_h, 2))
+    LOG.log("report_written", cells_committed=len(committed), gpu_hours=round(total_h, 2),
+            code_sha=PROV.get("code_sha"))
     return report
 
 
@@ -3707,6 +4813,12 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
     if not bank:
         raise RuntimeError("no question bank — run the 'data' stage first")
 
+    # Provenance-of-architecture: verify layers/hidden against each
+    # checkpoint's real config (auto-corrects MODEL_SPECS on drift), then
+    # chat-template / prompt-ending validation — all before any GPU compute.
+    verify_model_specs(cfg)
+    validate_chat_templates(cfg)
+
     nli = NLIGrader(cfg.NLI_MODEL, cfg.NLI_ENTAIL_THRESHOLD, cfg.NLI_BATCH_SIZE,
                     cfg.resolved_dtype(), "cuda" if DEVICES["cuda"] else "cpu") \
         if cfg.USE_NLI_FALLBACK else None
@@ -3769,28 +4881,47 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
     h0 = h1 = h2 = h3 = h4 = hlr = {}
     abst = {"by_category": {}, "per_cell": {}}
     corr, omni = pd.DataFrame(), pd.DataFrame()
+    pop, dmatch = {"available": False}, {"available": False}
+
+    # ---- judge audit runs BEFORE the hypothesis tests: H2's restored PLAN §16
+    # conjunct needs the Gate 1 verdict ("AND Gate 1 holds") available now.
+    judge = stage_judge(bank, graded, judge_cfg, cfg) if judge_cfg.ENABLED else {"enabled": False}
+
     if "stats" in cfg.STAGES and len(signals):
+        feats = question_features(bank)
         h0 = test_h0_format_agreement(meta["verbal_long"], cfg)
         h1 = test_h1_signal_calibration(signals, cfg)
-        h2 = test_h2_quadrants(signals, bank, cfg)
+        h2 = test_h2_quadrants(signals, bank, cfg,
+                               gate1_pass=judge.get("gate1_pass"), gate3=gate3)
         abst = abstention_split(graded, cfg)
         omni = omniscience_index(graded)
-        h3 = test_h3_base_vs_instruct(signals, abst, cfg)
+        # Gate 4 usability bar: base-model elicitation must actually parse
+        # (audit fix — the guard existed as a config knob but was never wired).
+        elic_ok = None
+        base_names = [m for m, s in MODEL_SPECS.items() if s.get("rung") == "h3-comparison"]
+        if len(graded) and base_names:
+            bg = graded[(graded.model.isin(base_names)) & (graded.variant == "FORCED")]
+            if len(bg):
+                elic_ok = bool(bg["parse_ok"].astype(float).mean()
+                               >= cfg.BASE_ELICITATION_MIN_PARSE_RATE)
+        h3 = test_h3_base_vs_instruct(signals, abst, cfg, gate4_elicit_ok=elic_ok)
         h4 = test_h4_depth(sweep, cfg)
-        hlr = hierarchical_regression(signals, cfg)
+        hlr = hierarchical_regression(signals, cfg, feats=feats)
         corr = correlation_table(signals, cfg)
+        pop = popularity_contrast(signals, cfg)          # recovered R1-vs-R2 gradient
+        dmatch = difficulty_matched_view(signals, graded, cfg)
 
-    # ---- optional post-hoc judge audit (loads last, frees itself) ---------
-    judge = stage_judge(bank, graded, judge_cfg, cfg) if judge_cfg.ENABLED else {"enabled": False}
     if len(graded):
         export_manual_check_sheet(bank, graded, cfg)
+    manual_sheet = ingest_manual_sheet(cfg)
 
     if "figures" in cfg.STAGES:
         stage_figures(signals, sweep, h1, h3, abst, corr, commitments, cfg)
     if "tables" in cfg.STAGES:
         stage_tables(bank, graded, signals, sweep, entropy, corr, commitments,
                      h0, h1, h2, h3, h4, abst, omni, cfg)
-    report = stage_report(bank, commitments, h0, h1, h2, h3, h4, gate3, judge, sanity, hlr, cfg) \
+    report = stage_report(bank, commitments, h0, h1, h2, h3, h4, gate3, judge, sanity,
+                          hlr, manual_sheet, cfg) \
         if "report" in cfg.STAGES else {}
 
     free_cuda()
@@ -3800,7 +4931,8 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
     return {"bank": bank, "commitments": commitments, "graded": graded, "entropy": entropy,
             "sweep": sweep, "signals": signals, "h0": h0, "h1": h1, "h2": h2, "h3": h3,
             "h4": h4, "hlr": hlr, "corr": corr, "omni": omni, "abstention": abst,
-            "gate3": gate3, "judge": judge, "report": report}
+            "popularity": pop, "difficulty_matched": dmatch,
+            "gate3": gate3, "judge": judge, "manual_sheet": manual_sheet, "report": report}
 
 
 # %%
