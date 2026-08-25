@@ -1,4 +1,28 @@
-RESULTS.md
-__pycache__
-AUDIT_TASKS_CHECKLIST.md
-AUDIT.md
+# Python & cache
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Large generation outputs, raw jsonl files, and embeddings
+*.jsonl
+*.npz
+*.parquet
+*.tar
+*.tar.gz
+*.zip
+*.pt
+*.bin
+*.safetensors
+
+# Output directories with raw data/activations
+confidence_out/
+confidence_backup*/
+all_5models/raw/
+all_5models/activations/
+all_5models/derived/
+all_5models/data/
+
+# OS files
+.DS_Store
+Thumbs.db

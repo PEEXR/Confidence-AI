@@ -1,0 +1,14 @@
+answer_form,grader,n
+entity,alias_exact,146114
+entity,no_answer,50582
+entity,string_fallback,34
+"l are fixed? The problem asks for a specific value, implying the configuration is unique",symbolic,1
+latex,latex_normalized,90752
+latex,no_answer,58728
+latex,symbolic,49392
+numeric,no_answer,17522
+numeric,numeric,74515
+numeric,string_fallback,905
+short,alias_exact,2614
+short,no_answer,21254
+short,string_fallback,71850

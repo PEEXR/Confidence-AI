@@ -1,0 +1,1 @@
+Figure 3 — unwarranted stated-confidence (high verbal / low behavioral-internal) and missed-knowledge rates, qwen3.5-9b-base vs qwen3.5-9b-instruct. Predicted under H3: the overstatement rate drops without a matched rise in missed knowledge. Null: overlapping bars / equal rates.

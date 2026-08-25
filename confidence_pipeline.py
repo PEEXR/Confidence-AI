@@ -972,8 +972,8 @@ def build_provenance(cfg: Config) -> dict:
 
 
 PROV = build_provenance(CFG)
-(PATHS["meta"] / "provenance.json").write_text(json.dumps(PROV, indent=2, default=str))
-(PATHS["meta"] / "config.json").write_text(json.dumps(asdict(CFG), indent=2, default=str))
+(PATHS["meta"] / "provenance.json").write_text(json.dumps(PROV, indent=2, default=str), encoding="utf-8")
+(PATHS["meta"] / "config.json").write_text(json.dumps(asdict(CFG), indent=2, default=str), encoding="utf-8")
 
 
 def set_all_seeds(seed: int) -> None:
@@ -992,7 +992,7 @@ def jsonl_read(path: Path) -> list[dict]:
     if not path.exists():
         return []
     out = []
-    with path.open() as fh:
+    with path.open("r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             line = line.strip()
             if not line:
@@ -1008,7 +1008,7 @@ def jsonl_append(path: Path, records: Sequence[dict], ensure_ascii: bool = False
     if not records:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as fh:
+    with path.open("a", encoding="utf-8") as fh:
         for r in records:
             fh.write(json.dumps(r, ensure_ascii=ensure_ascii, default=str) + "\n")
         fh.flush()
@@ -1017,14 +1017,14 @@ def jsonl_append(path: Path, records: Sequence[dict], ensure_ascii: bool = False
 
 def json_write(path: Path, obj: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str))
+    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
 
 
 def json_read(path: Path, default: Any = None) -> Any:
     if not path.exists():
         return default
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
     except json.JSONDecodeError:
         return default
 
@@ -1441,6 +1441,40 @@ FEWSHOT_POOL["SAMPLE"] = FEWSHOT_POOL["FORCED"]
 FEWSHOT_POOL["EXTRACT"] = FEWSHOT_POOL["FORCED"]
 
 
+# --- consistent assistant-turn tail (audit requirement) ---------------------
+# Every chat prompt must end on the SAME token so the activation tap's "last
+# prompt token" is constant across models. Reasoning models (e.g.
+# Qwen3.5-4B / 9B) ship a template that opens an UNCLOSED <think> block at the
+# assistant turn; left alone the model spends its entire generation budget
+# inside <think> and never emits the parseable ANSWER:/CONFIDENCE: lines.
+# We (a) ask the template to disable thinking when it supports that flag, and
+# (b) hard-normalise the tail to a closed empty-think block identical to the
+# smaller models' native templates, so all chat prompts end byte-identically.
+ASSISTANT_MARKER = "<|im_start|>assistant"
+CANON_ASSISTANT_TAIL = "\n<think>\n\n</think>\n\n"
+
+
+def think_off_kwargs(tokenizer) -> dict:
+    """Return the template kwarg that disables reasoning, if the template
+    supports it. Qwen3-style templates gate the <think> block on either
+    `enable_thinking` or `thinking`; unknown kwargs are silently ignored by
+    apply_chat_template, so we only pass a name the template actually uses."""
+    tpl = getattr(tokenizer, "chat_template", "") or ""
+    if "enable_thinking" in tpl:
+        return {"enable_thinking": False}
+    if "thinking" in tpl:
+        return {"thinking": False}
+    return {}
+
+
+def normalize_assistant_tail(text: str) -> str:
+    """Force a constant assistant-trigger tail across all chat models."""
+    idx = text.rfind(ASSISTANT_MARKER)
+    if idx == -1:
+        return text
+    return text[:idx + len(ASSISTANT_MARKER)] + CANON_ASSISTANT_TAIL
+
+
 def build_prompt(variant: str, question: str, tier_spec: dict, model_spec: dict,
                  tokenizer, cfg: Config) -> str:
     """Return the fully-rendered prompt string for one (variant, question)."""
@@ -1450,7 +1484,9 @@ def build_prompt(variant: str, question: str, tier_spec: dict, model_spec: dict,
             {"role": "system", "content": "You are a precise assistant. You always reply in the exact requested format."},
             {"role": "user", "content": f"{instr}\nQuestion: {question}"},
         ]
-        return tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+        text = tokenizer.apply_chat_template(
+            msgs, tokenize=False, add_generation_prompt=True, **think_off_kwargs(tokenizer))
+        return normalize_assistant_tail(text)
 
     # Base model: instruction + few-shot completion, no chat template.
     shots = FEWSHOT_POOL[variant][: cfg.N_FEWSHOT_BASE]
@@ -1917,6 +1953,46 @@ def load_model(name: str, cfg: Config) -> LoadedModel:
         from transformers import AutoModelForImageTextToText
         model = AutoModelForImageTextToText.from_pretrained(spec["hf_id"], **load_kwargs)
     model.eval()
+    if hasattr(model, "tie_weights"):
+        try:
+            model.tie_weights()
+        except Exception:
+            pass
+
+    embed = None
+    if hasattr(model, "get_input_embeddings"):
+        embed = model.get_input_embeddings()
+    elif hasattr(getattr(model, "model", None), "embed_tokens"):
+        embed = model.model.embed_tokens
+    elif hasattr(getattr(getattr(model, "model", None), "language_model", None), "embed_tokens"):
+        embed = model.model.language_model.embed_tokens
+
+    head = None
+    if hasattr(model, "get_output_embeddings"):
+        head = model.get_output_embeddings()
+    elif hasattr(model, "lm_head"):
+        head = model.lm_head
+    elif hasattr(getattr(model, "model", None), "lm_head"):
+        head = model.model.lm_head
+    elif hasattr(getattr(getattr(model, "model", None), "language_model", None), "lm_head"):
+        head = model.model.language_model.lm_head
+
+    if head is not None and embed is not None:
+        if getattr(model.config, "tie_word_embeddings", True):
+            head.weight = embed.weight
+
+    dt = cfg.resolved_dtype()
+    if dt is not None:
+        try:
+            model.to(dtype=dt)
+        except Exception:
+            for p in model.parameters():
+                if p.dtype != dt:
+                    p.data = p.data.to(dtype=dt)
+            for b in model.buffers():
+                if b.dtype == torch.float32 and dt in (torch.bfloat16, torch.float16):
+                    b.data = b.data.to(dtype=dt)
+
     model.generation_config.pad_token_id = tok.pad_token_id
     LOG.log("model_loaded", model=name, secs=round(time.time() - t0, 1),
             dtype=str(cfg.resolved_dtype()), vram=vram_report())
@@ -4647,7 +4723,9 @@ def validate_chat_templates(cfg: Config) -> dict:
             tok = AutoTokenizer.from_pretrained(spec["hf_id"], trust_remote_code=False)
             if spec["chat"]:
                 msgs = [{"role": "system", "content": "t"}, {"role": "user", "content": "q"}]
-                rendered = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+                rendered = tok.apply_chat_template(
+                    msgs, tokenize=False, add_generation_prompt=True, **think_off_kwargs(tok))
+                rendered = normalize_assistant_tail(rendered)
                 entry["renders"] = True
                 entry["endswith"] = rendered[-24:]
                 endings[name] = rendered[-24:]
@@ -4738,7 +4816,7 @@ def stage_report(bank: dict, commitments: dict, h0: dict, h1: dict, h2: dict, h3
         if verdict:
             lines.append(f"| {cfg.RUN_NAME}_{hid} | {hid} per PLAN §13 @ {PROV.get('code_sha')} | "
                          f"{'pass' if 'supported' in str(verdict) else 'null/falsified'} | {verdict} |")
-    (PATHS["meta"] / "run_log_rows.md").write_text("\n".join(lines))
+    (PATHS["meta"] / "run_log_rows.md").write_text("\n".join(lines), encoding="utf-8")
     LOG.log("report_written", cells_committed=len(committed), gpu_hours=round(total_h, 2),
             code_sha=PROV.get("code_sha"))
     return report
@@ -4940,24 +5018,25 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
 # CELL 23 — RUN
 # Safe to re-execute: every stage is idempotent and resumes from checkpoints.
 # ============================================================================
-RESULTS = run_pipeline(CFG, JUDGE)
+if __name__ == "__main__":
+    RESULTS = run_pipeline(CFG, JUDGE)
 
-print("\n" + "=" * 74)
-print(f"run '{CFG.RUN_NAME}'  ·  config {CFG.hash()}  ·  output {PATHS['root']}")
-print("=" * 74)
-_rep = RESULTS.get("report", {})
-if _rep:
-    _g = _rep["grid"]
-    print(f"grid          : {_g['cells_committed']}/{_g['cells_total']} cells committed "
-          f"({_g['ragged_by']} excluded by the 25–80% band)")
-    print(f"gpu measured  : {_rep['compute']['measured_gpu_hours']} hours")
-    print("\ngates")
-    for k, v in _rep["gates"].items():
-        print(f"  {k:26s} {v}")
-    print("\nhypotheses")
-    for k, v in _rep["hypotheses"].items():
-        print(f"  {k}: {v}")
-    print(f"\nfigures : {len(_rep['artifacts']['figures'])}  ->  {PATHS['figures']}")
-    print(f"tables  : {len(_rep['artifacts']['tables'])}  ->  {PATHS['tables']}")
-    print(f"\nNEXT: fill in {PATHS['tables'] / 'gate1_manual_check_sheet.csv'} to close Gate 1,")
-    print(f"      then paste {PATHS['meta'] / 'run_log_rows.md'} into PLAN.md §17.2.")
+    print("\n" + "=" * 74)
+    print(f"run '{CFG.RUN_NAME}'  ·  config {CFG.hash()}  ·  output {PATHS['root']}")
+    print("=" * 74)
+    _rep = RESULTS.get("report", {})
+    if _rep:
+        _g = _rep["grid"]
+        print(f"grid          : {_g['cells_committed']}/{_g['cells_total']} cells committed "
+              f"({_g['ragged_by']} excluded by the 25–80% band)")
+        print(f"gpu measured  : {_rep['compute']['measured_gpu_hours']} hours")
+        print("\ngates")
+        for k, v in _rep["gates"].items():
+            print(f"  {k:26s} {v}")
+        print("\nhypotheses")
+        for k, v in _rep["hypotheses"].items():
+            print(f"  {k}: {v}")
+        print(f"\nfigures : {len(_rep['artifacts']['figures'])}  ->  {PATHS['figures']}")
+        print(f"tables  : {len(_rep['artifacts']['tables'])}  ->  {PATHS['tables']}")
+        print(f"\nNEXT: fill in {PATHS['tables'] / 'gate1_manual_check_sheet.csv'} to close Gate 1,")
+        print(f"      then paste {PATHS['meta'] / 'run_log_rows.md'} into PLAN.md §17.2.")

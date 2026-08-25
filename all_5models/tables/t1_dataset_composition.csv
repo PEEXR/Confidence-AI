@@ -1,0 +1,7 @@
+tier,label,family,answer_form,difficulty,source,n,n_train,n_cal,n_test,max_new_tokens
+R1,PopQA (top popularity quintile),retrieval,entity,popularity: top quintile,akariasai/PopQA,1000,600,200,200,32
+R2,PopQA (bottom popularity quintile),retrieval,entity,popularity: bottom quintile,akariasai/PopQA,1000,600,200,200,32
+R3,SimpleQA (adversarial retrieval),retrieval,short,dataset design,basicv8vc/SimpleQA,1000,600,200,200,32
+C1,GSM8K,reasoning,numeric,—,openai/gsm8k,1000,600,200,200,256
+C2,MATH levels 1–2,reasoning,latex,built-in level 1–2,qwedsacf/competition_math,1000,600,200,200,320
+C3,MATH levels 4–5,reasoning,latex,built-in level 4–5,qwedsacf/competition_math,1000,600,200,200,448

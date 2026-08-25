@@ -1,0 +1,23 @@
+\begin{table}
+\caption{Which grading tier resolved each item — the LLM-judge-free audit trail.}
+\label{tab:t4_grader_tier_usage}
+\begin{tabular}{llr}
+\toprule
+answer\_form & grader & n \\
+\midrule
+entity & alias\_exact & 146114 \\
+entity & no\_answer & 50582 \\
+entity & string\_fallback & 34 \\
+l are fixed? The problem asks for a specific value, implying the configuration is unique & symbolic & 1 \\
+latex & latex\_normalized & 90752 \\
+latex & no\_answer & 58728 \\
+latex & symbolic & 49392 \\
+numeric & no\_answer & 17522 \\
+numeric & numeric & 74515 \\
+numeric & string\_fallback & 905 \\
+short & alias\_exact & 2614 \\
+short & no\_answer & 21254 \\
+short & string\_fallback & 71850 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,159 @@
+{
+  "provenance": {
+    "run_name": "v35_full1000",
+    "config_hash": "0be5d1e5fa83",
+    "seed": 20260813,
+    "code_sha": "v3-qwen35-audit-fixes",
+    "platform": "local",
+    "hf_token_set": false,
+    "linear_attn_kernels": "none",
+    "devices": {
+      "cuda": false,
+      "n_gpu": 0,
+      "gpus": [],
+      "total_vram_gb": 0.0,
+      "max_vram_gb": 0.0,
+      "bf16": false,
+      "torch": "cpu-analysis",
+      "python": "3.14.7"
+    },
+    "dtype": "float32",
+    "started_utc": "2026-08-25T07:05:20+00:00",
+    "transformers": "5.15.1",
+    "torch": "cpu-analysis",
+    "math_verify": true
+  },
+  "finished_utc": "2026-08-25T07:12:01+00:00",
+  "grid": {
+    "models": [
+      "qwen3.5-0.8b-instruct",
+      "qwen3.5-2b-instruct",
+      "qwen3.5-4b-instruct",
+      "qwen3.5-9b-instruct",
+      "qwen3.5-9b-base"
+    ],
+    "tiers": [
+      "R1",
+      "R2",
+      "R3",
+      "C1",
+      "C2",
+      "C3"
+    ],
+    "cells_total": 30,
+    "cells_committed": 30,
+    "ragged_by": 0
+  },
+  "questions": {
+    "R1": 1000,
+    "R2": 1000,
+    "R3": 1000,
+    "C1": 1000,
+    "C2": 1000,
+    "C3": 1000
+  },
+  "gates": {
+    "gate1_grading_sanity": {
+      "pass": null,
+      "automated_agreement": null,
+      "manual_agreement": null,
+      "manual_filled": "0/0",
+      "note": "Requires BOTH the judge agreement and the human check sheet to clear the threshold (PLAN §16)."
+    },
+    "gate2_format_agreement": {
+      "pass": false,
+      "min_lower_ci": -0.059889549757540864
+    },
+    "gate3_probe_validity": {
+      "cells": 24,
+      "passed": 14,
+      "dirty_activation_cells": 0
+    },
+    "gate4_model_comparison": {
+      "pass": false,
+      "available": true
+    }
+  },
+  "hypotheses": {
+    "H0": "H0 falsified — report all three formats separately (PLAN §16 Gate 2 fallback)",
+    "H1": "H1 falsified on direction — signals differ beyond noise, but the ordering is reversed: verbal is better calibrated than internal. ECE rank (best first): ['verbal', 'behavioral', 'internal']; resolution rank (highest first): ['behavioral', 'verbal', 'internal']. Note low verbal ECE with low resolution indicates a near-constant predictor.",
+    "H2": "H2 supported — replicated feature association with the alignment taxonomy, with Gate 1 and Gate 3 holding",
+    "H3": "H3 falsified / null — delta CI includes 0, the missed-knowledge guard fired, or base-model elicitation did not meet the usability bar",
+    "H4": "H4 falsified / null — onset curves overlap, or reasoning never reaches the gate"
+  },
+  "entropy_sanity": {
+    "all_same_confidence": 1.0,
+    "even_split_confidence": 0.0,
+    "n_samples": 10,
+    "passes": true
+  },
+  "hierarchical_regression": {
+    "method": "bayes_mixed_glm",
+    "n": 9106,
+    "pseudo_r2": null
+  },
+  "compute": {
+    "measured_gpu_hours": 0.0,
+    "by_model": {}
+  },
+  "judge": {
+    "enabled": false,
+    "judge_model": null,
+    "n_decided": null,
+    "agreement_overall": null,
+    "agreement_by_grader": null
+  },
+  "artifacts": {
+    "figures": [
+      "fig1_calibration.png",
+      "fig2_quadrant.png",
+      "fig3_model_delta.png",
+      "fig4_depth_prediction.png",
+      "fig5_cell_commitment_grid.png",
+      "fig6_signal_correlations.png"
+    ],
+    "tables": [
+      "gate1_manual_check_sheet.csv",
+      "t10_omniscience_index.csv",
+      "t11_abstention_split.csv",
+      "t12_per_question_signals.csv",
+      "t13_semantic_entropy.csv",
+      "t15_hypothesis_verdicts.csv",
+      "t1_dataset_composition.csv",
+      "t2_cell_commitment.csv",
+      "t3_parse_and_accuracy.csv",
+      "t4_grader_tier_usage.csv",
+      "t5_h0_format_agreement.csv",
+      "t6_h1_murphy_decomposition.csv",
+      "t7_probe_sweep.csv",
+      "t8_h4_depth_onsets.csv",
+      "t9_signal_correlations.csv"
+    ],
+    "derived": [
+      "abstention_split.json",
+      "abstention_split.parquet",
+      "bucket_mapping.json",
+      "calibration_meta.json",
+      "cell_commitments.json",
+      "correlations.parquet",
+      "difficulty_matched.json",
+      "entropy.parquet",
+      "entropy_sanity.json",
+      "gate3.json",
+      "graded.jsonl",
+      "graded.parquet",
+      "h0_gate2.json",
+      "h1_calibration.json",
+      "h2_quadrants.json",
+      "h3_model_delta.json",
+      "h4_depth.json",
+      "h4_onsets.parquet",
+      "hierarchical_regression.json",
+      "omniscience_index.parquet",
+      "popularity_gradient.json",
+      "probe_sweep.parquet",
+      "quadrants.parquet",
+      "signals.parquet"
+    ]
+  }
+}
