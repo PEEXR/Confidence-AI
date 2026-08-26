@@ -1,0 +1,305 @@
+{
+ "per_cell": {
+  "qwen2.5-1.5b-instruct__C1": {
+   "behavioral": {
+    "ece": 0.06970171789540522,
+    "brier": 0.1938931870891224,
+    "reliability": 0.005731577703033488,
+    "resolution": 0.059086580471774224,
+    "uncertainty": 0.24951696654993358,
+    "n": 182,
+    "base_rate": 0.521978021978022
+   }
+  },
+  "qwen2.5-1.5b-instruct__C2": {
+   "behavioral": {
+    "ece": 0.07101044571877363,
+    "brier": 0.23543632003759188,
+    "reliability": 0.005036052646641115,
+    "resolution": 0.017593008402569138,
+    "uncertainty": 0.2490474013107758,
+    "n": 162,
+    "base_rate": 0.4691358024691358
+   }
+  },
+  "qwen2.5-1.5b-instruct__R1": {
+   "behavioral": {
+    "ece": 0.10751937216236246,
+    "brier": 0.123605577900112,
+    "reliability": 0.013931965811849066,
+    "resolution": 0.10850585078539356,
+    "uncertainty": 0.21923741125517393,
+    "n": 191,
+    "base_rate": 0.32460732984293195
+   }
+  },
+  "qwen2.5-3b-instruct__C1": {
+   "verbal": {
+    "ece": 0.01954731574158327,
+    "brier": 0.24694874921448154,
+    "reliability": 0.00038244097075392663,
+    "resolution": 0.002208691756272401,
+    "uncertainty": 0.24877499999999997,
+    "n": 200,
+    "base_rate": 0.465
+   },
+   "behavioral": {
+    "ece": 0.0745727979766774,
+    "brier": 0.20556933812869313,
+    "reliability": 0.005328836279315761,
+    "resolution": 0.047677339146241594,
+    "uncertainty": 0.24877499999999997,
+    "n": 200,
+    "base_rate": 0.465
+   }
+  },
+  "qwen2.5-3b-instruct__C2": {
+   "verbal": {
+    "ece": 0.008763566211876406,
+    "brier": 0.23204284958951515,
+    "reliability": 7.680009274994177e-05,
+    "resolution": 0.0,
+    "uncertainty": 0.231775,
+    "n": 200,
+    "base_rate": 0.365
+   },
+   "behavioral": {
+    "ece": 0.06369020979021014,
+    "brier": 0.16522997144749177,
+    "reliability": 0.007394831570530446,
+    "resolution": 0.07405092052786282,
+    "uncertainty": 0.231775,
+    "n": 200,
+    "base_rate": 0.365
+   }
+  },
+  "qwen2.5-3b-instruct__R1": {
+   "verbal": {
+    "ece": 0.015856626338478595,
+    "brier": 0.21147892484310865,
+    "reliability": 0.0007850578992417461,
+    "resolution": 0.023681133056133053,
+    "uncertainty": 0.234375,
+    "n": 200,
+    "base_rate": 0.375
+   },
+   "behavioral": {
+    "ece": 0.07441347122156348,
+    "brier": 0.11621524353049208,
+    "reliability": 0.01122135574208402,
+    "resolution": 0.12972470696072297,
+    "uncertainty": 0.23484255448094749,
+    "n": 199,
+    "base_rate": 0.3768844221105528
+   }
+  },
+  "qwen2.5-7b-base__C1": {
+   "behavioral": {
+    "ece": 0.06608123344317374,
+    "brier": 0.20487655124165413,
+    "reliability": 0.0060152070483293985,
+    "resolution": 0.04407916666666667,
+    "uncertainty": 0.2436,
+    "n": 200,
+    "base_rate": 0.42
+   }
+  },
+  "qwen2.5-7b-base__C2": {
+   "behavioral": {
+    "ece": 0.08833229444100658,
+    "brier": 0.1691092836956834,
+    "reliability": 0.00971210920845195,
+    "resolution": 0.0896712642740029,
+    "uncertainty": 0.2496,
+    "n": 200,
+    "base_rate": 0.52
+   }
+  },
+  "qwen2.5-7b-base__R1": {
+   "behavioral": {
+    "ece": 0.07079503459503447,
+    "brier": 0.13193012805199295,
+    "reliability": 0.009950559901373092,
+    "resolution": 0.1278805374666973,
+    "uncertainty": 0.25,
+    "n": 200,
+    "base_rate": 0.5
+   }
+  },
+  "qwen2.5-7b-instruct__C1": {
+   "behavioral": {
+    "ece": 0.06738397594265369,
+    "brier": 0.13278491498617373,
+    "reliability": 0.00629428522460234,
+    "resolution": 0.09985750034279445,
+    "uncertainty": 0.22749999999999998,
+    "n": 200,
+    "base_rate": 0.65
+   }
+  },
+  "qwen2.5-7b-instruct__C2": {
+   "verbal": {
+    "ece": 0.021453096179802227,
+    "brier": 0.24771549125357673,
+    "reliability": 0.0027818505373727463,
+    "resolution": 0.0038063063063063056,
+    "uncertainty": 0.2475,
+    "n": 200,
+    "base_rate": 0.55
+   },
+   "behavioral": {
+    "ece": 0.1347602072394995,
+    "brier": 0.1883413287667629,
+    "reliability": 0.021758843306230097,
+    "resolution": 0.08188648883957807,
+    "uncertainty": 0.2475,
+    "n": 200,
+    "base_rate": 0.55
+   }
+  },
+  "qwen2.5-7b-instruct__C3": {
+   "verbal": {
+    "ece": 0.006101080386794133,
+    "brier": 0.15389535898280937,
+    "reliability": 3.722318188612405e-05,
+    "resolution": 0.0,
+    "uncertainty": 0.1539,
+    "n": 200,
+    "base_rate": 0.19
+   },
+   "behavioral": {
+    "ece": 0.035245383111512193,
+    "brier": 0.1257766756880943,
+    "reliability": 0.0024713558277846396,
+    "resolution": 0.030041000800847345,
+    "uncertainty": 0.1539,
+    "n": 200,
+    "base_rate": 0.19
+   }
+  },
+  "qwen2.5-7b-instruct__R1": {
+   "verbal": {
+    "ece": 0.024219134890137016,
+    "brier": 0.22870585144098038,
+    "reliability": 0.0006044140486029893,
+    "resolution": 0.01855900047535323,
+    "uncertainty": 0.24666043786773062,
+    "n": 199,
+    "base_rate": 0.44221105527638194
+   },
+   "behavioral": {
+    "ece": 0.07753792759542656,
+    "brier": 0.15279594384211342,
+    "reliability": 0.006206933071615722,
+    "resolution": 0.09880140828759551,
+    "uncertainty": 0.24666043786773062,
+    "n": 199,
+    "base_rate": 0.44221105527638194
+   }
+  }
+ },
+ "pooled": {
+  "verbal": {
+   "n": 1199,
+   "ece": 0.009462067154471124,
+   "ece_lo": 0.01011325843866232,
+   "ece_hi": 0.04262951834081253,
+   "brier": 0.22012405272181265,
+   "brier_lo": 0.21262727046951305,
+   "brier_hi": 0.22788308030061,
+   "reliability": 9.35211929904376e-05,
+   "resolution": 0.01936340279661365,
+   "uncertainty": 0.23956160297606915,
+   "base_rate": 0.3978315262718932
+  },
+  "behavioral": {
+   "n": 2533,
+   "ece": 0.033541715818082414,
+   "ece_lo": 0.028447937222567485,
+   "ece_hi": 0.05303583328335475,
+   "brier": 0.16395372047520304,
+   "brier_lo": 0.15670954439231144,
+   "brier_hi": 0.171521148375132,
+   "reliability": 0.001249027009665151,
+   "resolution": 0.08308114645776843,
+   "uncertainty": 0.24701028928993973,
+   "base_rate": 0.4453217528622187
+  },
+  "internal": {
+   "n": 0
+  }
+ },
+ "coverage": {
+  "cells_total": 13,
+  "per_signal": {
+   "verbal": {
+    "n_rows": 1199,
+    "n_cells": 6,
+    "missing_cells": [
+     "qwen2.5-1.5b-instruct__C1",
+     "qwen2.5-1.5b-instruct__C2",
+     "qwen2.5-1.5b-instruct__R1",
+     "qwen2.5-7b-base__C1",
+     "qwen2.5-7b-base__C2",
+     "qwen2.5-7b-base__R1",
+     "qwen2.5-7b-instruct__C1"
+    ]
+   },
+   "behavioral": {
+    "n_rows": 2533,
+    "n_cells": 13,
+    "missing_cells": []
+   },
+   "internal": {
+    "n_rows": 0,
+    "n_cells": 0,
+    "missing_cells": [
+     "qwen2.5-1.5b-instruct__C1",
+     "qwen2.5-1.5b-instruct__C2",
+     "qwen2.5-1.5b-instruct__R1",
+     "qwen2.5-3b-instruct__C1",
+     "qwen2.5-3b-instruct__C2",
+     "qwen2.5-3b-instruct__R1",
+     "qwen2.5-7b-base__C1",
+     "qwen2.5-7b-base__C2",
+     "qwen2.5-7b-base__R1",
+     "qwen2.5-7b-instruct__C1",
+     "qwen2.5-7b-instruct__C2",
+     "qwen2.5-7b-instruct__C3",
+     "qwen2.5-7b-instruct__R1"
+    ]
+   }
+  },
+  "cells_all_three_signals": [],
+  "cells_equal": false,
+  "n_rows_by_signal": {
+   "verbal": 1199,
+   "behavioral": 2533,
+   "internal": 0
+  },
+  "n_rows_complete_case": 0,
+  "n_rows_test": 2600,
+  "like_for_like": false,
+  "warning": "Signals do not score the same questions, so pooled ECE/Brier/Murphy and the best-worst delta are computed over DIFFERENT sets and are not a like-for-like comparison. Cells carrying all three: 0 of 13. Rows per signal: {'verbal': 1199, 'behavioral': 2533, 'internal': 0}; only 0 of 2600 test rows carry all three signals. Use the complete-case subset for any cross-signal claim."
+ },
+ "ece_ranking": [
+  "verbal",
+  "behavioral"
+ ],
+ "resolution_ranking": [
+  "behavioral",
+  "verbal"
+ ],
+ "delta_worst_minus_best": {
+  "worst": "behavioral",
+  "best": "verbal",
+  "delta": 0.02407964866361129,
+  "lo": -0.005418903561670536,
+  "hi": 0.03588347270076433,
+  "excludes_zero": false
+ },
+ "signals_separable": false,
+ "direction_matches_prediction": false,
+ "h1_pass": false,
+ "verdict": "H1 falsified \u2014 CIs overlap, no ordering distinguishable"
+}

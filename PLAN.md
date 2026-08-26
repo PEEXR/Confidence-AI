@@ -11,7 +11,65 @@
 
 ## 0. Status
 
-**Status: pre-registration — no runs yet.**
+**Status: three production runs completed. The verbal axis has been re-analysed
+with the repaired code and does not support H2 or H3; the internal axis is
+unmeasured and needs a re-run.**
+
+The repaired analysis (`audit_docs/reanalyse.py` → `results_repaired/`,
+CPU-only, over the existing `graded.parquet`) is the current statement of what
+this project has found. Full tables in `audit_docs/FINDINGS.md`:
+
+| Result | Status after repair |
+|---|---|
+| Verbalized confidence usable | **6 of 30 cells.** Nothing below 3B on any tier; base model nowhere. |
+| Gate 2 — do the formats agree? | **Falsified.** A–B ρ=0.217, A–C ρ=**−0.047**, B–C ρ=0.050. |
+| Format B's calibration | **Circular.** ECE = 0.0000 exactly. Excluded; canonical axis moves B → Bfix. |
+| H2 — quadrant taxonomy | **Not supported.** 111 cases, all from 2 of 6 cells; 4 of 6 cells never cross the threshold. |
+| H3 — base vs instruct | **Untestable.** 0 matched rows carry both signals; 802 excluded for a missing signal. |
+| H1 — signal comparison | Behavioural entropy out-resolves stated confidence **4.3×** (0.0831 vs 0.0194) with full grid coverage. |
+| H4 — depth of decodability | **Unmeasured.** Activations were captured by the broken tap and are not in the repo. |
+
+H2 and H3 are withdrawn outright rather than reframed: the axis they were
+measured on is largely absent, so there is no descriptive result underneath
+them either.
+
+**One ablation could overturn the headline.** The surviving cells use 3–4
+distinct confidence values, which may indict the elicitation rather than the
+model. A coarser scale (0–10) or a logit-based readout at 1.5B should run before
+anything is written up.
+
+Pre-registration timing holds: this document's v3 was committed 2026-08-12 and
+all three result trees first appear 2026-08-13.
+
+| Run tree | Date | Status |
+|---|---|---|
+| `results_prerepair/` | 2026-08-13 | superseded — pre-audit tap, label-derived verbal axis |
+| `results_v2_flawed/` | 2026-08-13 | superseded — verbal-degeneracy exclusion applied, H1 flipped to falsified |
+| `results/` (v2.5) | 2026-08-13 | current; Gate 1 sheet filled (200/200, 97.5% agreement) |
+
+**Every run above records `code_sha: "nogit"`, so none is bound to a version of
+the pipeline.** `CODE_SHA` must be set in the environment before the next run
+(§17.3). Run provenance is auto-generated to `meta/run_log_rows.md` and pasted
+into §17.2.
+
+**Audit findings blocking the current results** (`audit_docs/AUDIT.md`; all
+fixed in code, none re-measured):
+1. **The activation tap read the wrong token.** `tap.pop()` ran after
+   `generate()`, so the hook buffer held the last *generated* token, not the
+   last *prompt* token — contradicting `CHANGESforPLANv3.md` §4. Every
+   internal-probe number in the repo measures something other than what §6
+   specifies. Now fixed by a dedicated prefill pass with the tap frozen before
+   decode, and guarded by a blocking p0 negative control.
+2. **The verbal axis was label-derived.** Format B's raw value *was* the
+   empirical accuracy of the chosen bucket, fit on the calibration split and
+   then calibrated again on it (`format_stats.B.ece = 2.3e-17`). B can no
+   longer be canonical.
+3. **Semantic entropy used raw sample counts**, skipped NLI merging for all
+   math tiers, and normalised by `log(n_valid)` — so one parsed sample scored
+   confidence 1.0.
+4. **H2 and H3/Figure 3 are withdrawn.** H2's result is threshold-adjacent and
+   carried by three cells; `hopeful_rate_base = 0.0` was a NaN coerced by
+   `.astype(float)`.
 
 **Open items carried into v3 (each is tracked as a standing risk, §16):**
 1. The §15 depth-curve figure stub (`plots/fig4_depth_prediction.py`) has not
@@ -756,7 +814,18 @@ each row names the design ID it addresses.
 
 | Run-log ID | What it did | Outcome | Headline |
 |---|---|---|---|
-| *(empty until runs start)* | | | |
+| `prerepair` | First full pass, 13/30 cells | superseded | Pre-audit activation tap; internal-probe numbers invalid. |
+| `v2_flawed` | Verbal-degeneracy exclusion (§8·6) applied | superseded | Cost 53% of n and flipped H1 from supported to **falsified**. `nonfinite_frac = 0.0` across all 65 shards. |
+| `v2.5` | Gate 1 human check sheet filled | current, withdrawn | 200/200 rows, 195/200 (97.5%) agreement; 5 disagreements, all symbolic-grader LaTeX formatting. H2/H3 withdrawn per §0. |
+| `reanalysis` | CPU re-run of the verbal axis, entropy normalisation and H0–H3 over the existing `graded.parquet` | current | Gate 2 falsified; H2 not supported; H3 untestable; behavioural entropy out-resolves the verbal axis 4.3×. No GPU, no re-generation. See `audit_docs/FINDINGS.md`. |
+| *(next run)* | Post-audit re-measurement — Signal 3 above all | pending | Requires `CODE_SHA` set. The acceptance test is the p0 negative control returning ≈0.50. Paste `meta/run_log_rows.md` here. |
+
+**Provenance rule.** Each row must carry the `code_sha` of the code that
+produced it. `run_log_rows.md` is generated automatically at the end of every
+run with code_sha, config hash, seed, platform, dtype, library versions, cell
+coverage and measured GPU-hours — paste it here rather than reconstructing it.
+The three rows above are reconstructed, and are marked as such because their
+`code_sha` is `nogit`.
 
 ### 17.3 Process rules
 
@@ -770,3 +839,7 @@ each row names the design ID it addresses.
   a denominator is a number, not a measurement.
 - **Every long Kaggle job checkpoints and resumes by question ID** (§10);
   a job that cannot resume is not a measurement.
+- **Every run binds to a commit.** Set `CODE_SHA` before starting on a
+  platform without the repository attached (molab, Kaggle). A run recording
+  `UNBOUND-nogit` is not a measurement either — it cannot be reproduced,
+  because there is no way to know what code produced it.

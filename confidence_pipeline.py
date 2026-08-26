@@ -331,6 +331,10 @@ class Config:
     SAMPLE_TEMPERATURE: float = 0.8     # PLAN §5: must be in 0.7–1.0
     SAMPLE_TOP_P: float = 0.95
     N_SAMPLES: int = 10                 # PLAN §5 N=10
+    # Entropy is normalised by log(N_SAMPLES), never by the number of samples
+    # that happened to parse; a question below ENTROPY_MIN_VALID is NaN, not 1.0.
+    ENTROPY_MIN_VALID: int = 8          # < this many parsed samples -> NaN
+    ENTROPY_LP_WEIGHTED: bool = True    # Rao-Blackwellise cluster mass by sequence log-probs
     N_FEWSHOT_BASE: int = 4             # few-shot exemplars for the base model
     STOP_ON_DOUBLE_NEWLINE: bool = False
 
@@ -352,16 +356,35 @@ class Config:
     EMPTY_CACHE_EVERY_BATCHES: int = 4
 
     # ------------------------------------------------------- band gate ----
-    ACCURACY_BAND: tuple[float, float] = (0.25, 0.80)   # PLAN §3
-    COMMIT_CELLS_OUTSIDE_BAND: bool = False             # True = ignore the gate (records the violation)
+    # PLAN §3's 25-80% band is a legitimate base-rate control, but DELETING
+    # out-of-band cells removed all of R2, all of R3, all of 0.5B and 5/6 of
+    # C3 — three quarters of the grid — on the strength of a noisy n=100 pilot
+    # (AUDIT finding 9). The band is now recorded as a covariate (`in_band`)
+    # and the control is applied statistically, by difficulty matching and by
+    # the GLMM's cell random intercepts. Set COMMIT_CELLS_OUTSIDE_BAND=False
+    # to restore the old deleting behaviour.
+    ACCURACY_BAND: tuple[float, float] = (0.25, 0.80)   # PLAN §3 — reported, not enforced
+    COMMIT_CELLS_OUTSIDE_BAND: bool = True              # False = delete out-of-band cells (pre-audit)
 
     # ------------------------------------------------------- probe (§6) ---
     PERCENTILES: tuple[int, ...] = (0, 25, 50, 75, 100)
-    PROBE_LABEL: str = "correct"        # correct | entropy  (PLAN §6·5)
+    # PLAN §6·5 recommends the ENTROPY label. Training on `correct` makes the
+    # probe a second supervised accuracy predictor, so the "three-signal
+    # comparison" races one unsupervised signal against two supervised ones
+    # (AUDIT finding 4). "correct" remains available as a documented
+    # supervised reference mode — it is no longer the default.
+    PROBE_LABEL: str = "entropy"        # entropy | correct  (PLAN §6·5)
     PROBE_C_GRID: tuple[float, ...] = (0.01, 0.1, 1.0, 10.0)
+    PROBE_C_SELECT: bool = True         # pick C on the calibration split, never hardcode
     PROBE_MAX_ITER: int = 2000
     PROBE_STORE_DTYPE: str = "float32"  # PLAN §16 standing risk 1
     AUROC_GATE: float = 0.65            # Gate 3
+    GATE3_ENFORCE: bool = True          # block probe fitting on cells with dirty activations
+    # The embedding of a fixed prompt-ending token carries no question
+    # information, so p0 MUST score ~0.50. The pre-audit tap scored 0.717
+    # there, which is what exposed it as reading a generated token. This is now
+    # a blocking control, not a diagnostic.
+    P0_NEG_CONTROL_TOL: float = 0.10    # |AUROC(p0) - 0.5| above this fails Gate 3
     LABEL_SHUFFLE_REPEATS: int = 20     # null distribution size
     SURFACE_BASELINE: bool = True       # TF-IDF prompt-only control (PLAN §14.1)
 
@@ -388,6 +411,14 @@ class Config:
     ISOTONIC_MIN_N: int = 200           # below this, auto falls back to Platt
     MIN_DISTINCT_VERBAL: int = 3        # PLAN §8·6 verbal pre-flight
     QUADRANT_THRESHOLD: float = 0.5     # split point on calibrated scores
+    # One variant defines ground-truth correctness for the whole comparison.
+    # Accuracy differs by up to 12 points across A/B/C/SAMPLE/EXTRACT, so
+    # scoring the verbal signal against B's correctness while the probe trains
+    # on EXTRACT's correctness compares three signals to three different
+    # targets (AUDIT finding 4). EXTRACT is the plain answering pass with no
+    # confidence elicitation in context, and it is the pass the activations
+    # were tapped from.
+    GROUND_TRUTH_VARIANT: str = "EXTRACT"   # EXTRACT | FORCED | canonical_verbal
     HLR_METHOD: str = "auto"            # auto | bayes_mixed | cluster_robust
 
     # ------------------------------------------------- checkpoint / io ---
@@ -525,13 +556,38 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
 def code_sha() -> str:
-    try:
-        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5)
-        if r.returncode == 0:
-            return r.stdout.strip()
-    except Exception:
-        pass
-    return "nogit"
+    """The commit this run's code came from.
+
+    Every shipped run recorded `code_sha: "nogit"`, so no result is bound to a
+    version of the pipeline (AUDIT finding 8). On Molab/Kaggle the notebook is
+    uploaded without its repository, so a bare `git rev-parse` in the working
+    directory finds nothing and the failure is silent. Three sources are tried,
+    in order of trustworthiness, and an unbound run now says so loudly instead
+    of writing a placeholder that reads like a value.
+    """
+    env = os.environ.get("CODE_SHA", "").strip()
+    if env:
+        return env[:40]
+    here = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+    for start in (here, Path.cwd()):
+        for d in [start, *start.parents]:
+            if (d / ".git").exists():
+                try:
+                    r = subprocess.run(["git", "-C", str(d), "rev-parse", "--short", "HEAD"],
+                                       capture_output=True, text=True, timeout=5)
+                    if r.returncode == 0 and r.stdout.strip():
+                        sha = r.stdout.strip()
+                        dirty = subprocess.run(["git", "-C", str(d), "status", "--porcelain"],
+                                               capture_output=True, text=True, timeout=5)
+                        return sha + ("-dirty" if dirty.stdout.strip() else "")
+                except Exception:                        # noqa: BLE001
+                    pass
+    warnings.warn(
+        "code_sha is UNBOUND: no .git found and CODE_SHA is unset, so this run cannot be "
+        "traced to a version of the pipeline. On Molab/Kaggle, set CODE_SHA in the environment "
+        "before running (e.g. os.environ['CODE_SHA'] = '<sha from git rev-parse HEAD>').",
+        RuntimeWarning, stacklevel=2)
+    return "UNBOUND-nogit"
 
 
 def build_provenance(cfg: Config) -> dict:
@@ -930,6 +986,27 @@ ANSWER_STYLE = {
 
 BUCKETS: tuple[str, ...] = ("CERTAIN", "FAIRLY_CONFIDENT", "SOMEWHAT_UNSURE", "MOSTLY_GUESSING", "NO_IDEA")
 
+# Fixed semantic values for the Format-B buckets, assigned from the plain
+# meaning of each label and NEVER from data. AUDIT finding 2: mapping a bucket
+# to the empirical accuracy of the answers placed in it makes "the model's
+# stated confidence" a supervised P(correct) estimate wearing the model's
+# label — which is why format B scored ECE 2.3e-17, identically zero by
+# construction. These constants give B a label-free reading that can stand as
+# a genuine verbalized axis; the empirical mapping survives alongside it as an
+# explicitly supervised reference.
+BUCKET_FIXED_VALUES: dict[str, float] = {
+    "CERTAIN": 0.95,
+    "FAIRLY_CONFIDENT": 0.75,
+    "SOMEWHAT_UNSURE": 0.50,
+    "MOSTLY_GUESSING": 0.30,
+    "NO_IDEA": 0.10,
+}
+# Formats whose raw value is a genuine model utterance. Only these may become
+# the canonical verbal axis. "B" is excluded by construction, in selection AND
+# in the degenerate fallback.
+LABEL_FREE_FORMATS: tuple[str, ...] = ("A", "Bfix", "C")
+VERBAL_FORMATS: tuple[str, ...] = ("A", "B", "Bfix", "C")
+
 # PLAN §4 format B: these are ordinal placeholders ONLY, used for sanity checks
 # and never for scoring. The scored mapping is fit empirically in `stats`
 # (PLAN §4 "bucket-to-probability mapping" / §14.3 manipulation check).
@@ -1097,12 +1174,93 @@ def clean_answer(raw: str | None) -> str | None:
 
 
 def parse_confidence_numeric(raw: str | None) -> float | None:
+    """Format A's stated confidence, as a probability in [0, 1].
+
+    The prompt asks for "an integer from 0 to 100", and models comply most of
+    the time. When they do not, the original parser divided by 100 regardless:
+    a model answering "0.9" was recorded as **0.009**, a hundredfold error that
+    lands inside [0, 1], is a distinct value (so the degeneracy pre-flight
+    cannot see it), and reads as near-total uncertainty from a model expressing
+    near-total confidence. Survivable while Format B was canonical; not now
+    that AUDIT finding 2's repair makes A the canonical verbal axis.
+
+    The scale is therefore inferred:
+
+    * ``50/50``, ``fifty-fifty``       -> 0.5             (idiom, not a ratio)
+    * ``7/10``, ``1 in 10``, ``2/3``   -> 0.7, 0.1, 0.667  (small-denominator ratio)
+    * ``85%``                          -> 0.85            (explicit percentage)
+    * ``0.9``, ``.85``, ``1.0``        -> 0.9, 0.85, 1.0  (decimal at or below 1)
+    * ``85``, ``100``, ``85.5``        -> 0.85, 1.0, 0.855 (the 0-100 scale asked for)
+
+    The ratio branch requires a denominator of at most RATIO_MAX_DENOM (or
+    exactly 100, which is a percentage written long). Anything else returns
+    None rather than falling through: the fall-through hands the NUMERATOR to
+    the 0-100 branch, so ``"21 out of 21"`` would read 0.21 against 1.0 for
+    ``"20 out of 20"`` — a 5x cliff either side of the bound, wrong by exactly
+    den/100, and plausible rather than absent. An unparsed row shows up in the
+    format-compliance rate; 0.21 does not.
+
+    ``"50/50"`` is handled before that branch, because it is an idiom rather
+    than a ratio: read literally it is 1.0, i.e. certainty, which is the
+    opposite of what the phrase means. Left to the ratio branch it would record
+    perfect confidence for a model saying it had none — manufacturing exactly
+    the unwarranted stated confidence this project measures.
+
+    Two known limits, both inherent to inferring a scale from free text:
+
+    * A bare integer ``1`` stays 0.01. The instruction was 0-100, and reading
+      it as certainty would invent confidence the model never expressed.
+    * A ratio whose denominator is neither at most RATIO_MAX_DENOM nor exactly
+      100 returns None. The lookbehind on every branch stops a range like
+      ``"90-95%"`` from being read as the negative number -95.
+    * The rule is discontinuous at 1.0: ``"1.0"`` is read as a probability
+      while ``"1.5"`` is read as 1.5 on the 0-100 scale. A model answering on a
+      0-10 scale is misread. There is no reading of a bare "1.5" that is right
+      under every convention; the format-compliance rate in `t3_parse_and_accuracy`
+      is what tells you whether this matters for a given cell.
+    """
     if raw is None:
         return None
-    m = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%?", raw)
+    text = raw.strip()
+    RATIO_MAX_DENOM = 20
+
+    # "50/50" is an idiom, not a ratio. Read literally it is 50 out of 50 = 1.0,
+    # i.e. certainty — the exact opposite of what the phrase means. It is the
+    # one x/x form that must NOT go through the ratio branch.
+    if re.search(r"(?<![\d.])50\s*[/:-]\s*50(?![\d.])", text) or \
+       re.search(r"\bfifty[\s-]*fifty\b", text, re.I):
+        return 0.5
+
+    m = re.search(r"(?<![\d.])(-?\d+(?:\.\d+)?)\s*(?:/|out\s+of|in)\s*(-?\d+(?:\.\d+)?)",
+                  text, re.I)
+    if m:
+        num, den = float(m.group(1)), float(m.group(2))
+        if 0 < den <= RATIO_MAX_DENOM and 0 <= num <= den:
+            return num / den
+        if den == 100 and 0 <= num <= 100:
+            return num / 100.0             # "85/100" — a percentage written long
+        # Anything else is a ratio on a scale this parser cannot read. Falling
+        # through would hand the NUMERATOR to the 0-100 branch and return
+        # num/100 instead of num/den — wrong by exactly den/100, and plausible
+        # rather than absent: "21 out of 21" would score 0.21 where "20 out of
+        # 20" scores 1.0, a 5x cliff either side of the bound. An unparsed row
+        # is visible in the format-compliance rate; 0.21 is not.
+        return None
+
+    m = re.search(r"(?<![\d.])(-?\d{1,3}(?:\.\d+)?)\s*%", text)
+    if m:
+        v = float(m.group(1))
+        return v / 100.0 if 0 <= v <= 100 else None
+
+    m = re.search(r"(?<![\d.])(-?\d{1,3}(?:\.\d+)?|-?\.\d+)", text)
     if not m:
         return None
-    v = float(m.group(1))
+    tok = m.group(1)
+    v = float(tok)
+    if v < 0:                       # a negative confidence is not a parse, it is noise
+        return None
+    if "." in tok and v <= 1.0:
+        return v                                   # already a probability
     if v > 100:
         return None
     return v / 100.0
@@ -1543,26 +1701,126 @@ def percentile_layers(n_layers: int, percentiles: Sequence[int]) -> dict[int, in
     return {p: int(round(p / 100.0 * n_layers)) for p in percentiles}
 
 
+def _transformer_base(model: Any) -> Any:
+    """The decoder stack itself — the module that owns `embed_tokens` and
+    `layers` — with no LM head attached.
+
+    PLAN §6 taps depth percentiles of the *prompt* representation, so the
+    prefill pass must run the body alone: the logits head is dead weight here
+    and, on a 7B model at batch 32, materialising a [32, seq, 152k] logit
+    tensor is the difference between fitting in VRAM and not.
+
+    Raises rather than guessing. A silent fallback to `.model` on an
+    architecture that nests its stack elsewhere would tap whatever module
+    happened to answer to `.layers`, and every downstream AUROC would be
+    measuring the wrong thing without a single warning — which is precisely
+    the failure this rewrite exists to correct.
+    """
+    seen = []
+    for attr in ("model", "transformer", "gpt_neox", "base_model", "decoder"):
+        cand = getattr(model, attr, None)
+        if cand is None:
+            continue
+        seen.append(attr)
+        if hasattr(cand, "layers") and hasattr(cand, "embed_tokens"):
+            return cand
+        inner = getattr(cand, "model", None)          # PEFT / wrapper double-nesting
+        if inner is not None and hasattr(inner, "layers") and hasattr(inner, "embed_tokens"):
+            return inner
+    raise RuntimeError(
+        f"ActivationTap: cannot locate the transformer body on "
+        f"{type(model).__name__} (checked {seen or 'no known attributes'}). "
+        f"The tap requires a module exposing both `embed_tokens` and `layers`. "
+        f"Refusing to tap blind — add this architecture to `_transformer_base`."
+    )
+
+
+def last_prompt_index(attention_mask: "torch.Tensor") -> "torch.Tensor":
+    """Row-wise index of the final real prompt token, for either padding side.
+
+    `cumsum(-1).argmax(-1)` lands on the last non-pad position regardless of
+    where the padding sits, because argmax returns the FIRST occurrence of the
+    maximum: left padding [0,0,1,1,1] -> cumsum [0,0,1,2,3] -> 4, right padding
+    [1,1,1,0,0] -> cumsum [1,2,3,3,3] -> 2. The old hook hardcoded `-1`, which
+    is only correct under left padding and silently taps a PAD embedding the
+    moment a tokenizer defaults the other way.
+    """
+    return attention_mask.long().cumsum(-1).argmax(-1)
+
+
 class ActivationTap:
-    """Registers forward hooks on the requested depth points and captures the
-    last-position hidden vector of each forward pass."""
+    """Captures the hidden vector at the last PROMPT token, at each requested
+    depth percentile, during a dedicated prefill forward pass.
+
+    The tap freezes itself once prefill completes. Decoding re-invokes every
+    hooked module once per generated token, so an unfrozen buffer would end the
+    pass holding the LAST GENERATED token's state — the defect that made a
+    provably constant position score AUROC 0.717 (AUDIT finding 1). Freezing is
+    what makes the captured vector pre-generation by construction rather than
+    by call-ordering luck.
+    """
 
     def __init__(self, lm: LoadedModel, percentiles: Sequence[int]):
         self.lm = lm
         self.map = percentile_layers(lm.spec["layers"], percentiles)
         self.buffer: dict[int, torch.Tensor] = {}
         self._handles: list[Any] = []
-        base = lm.model.model                     # Qwen2ForCausalLM.model
-        for pct, idx in self.map.items():
-            module = base.embed_tokens if idx == 0 else base.layers[idx - 1]
-            self._handles.append(module.register_forward_hook(self._make_hook(pct)))
+        self._index: "torch.Tensor | None" = None
+        self.frozen: bool = True                   # nothing is captured until prefill opens it
+        base = _transformer_base(lm.model)
+        n_blocks = len(base.layers)
+        # Both directions. An OVER-count raises on the index; an UNDER-count
+        # would not, and would silently shift every percentile — p100 would tap
+        # layers[23] of 28 and still look like "the final block". The depth
+        # percentiles are the entire point of Signal 3, so a stale
+        # MODEL_SPECS['layers'] must be an error, not a quiet re-scaling.
+        # Compare the WHOLE map, not just p100: with PERCENTILES=(0,25,50,75)
+        # there is no p100 entry to check, and an under-counted spec would
+        # still shift every depth silently.
+        truth = percentile_layers(n_blocks, percentiles)
+        if self.map != truth:
+            raise RuntimeError(
+                f"ActivationTap: MODEL_SPECS['layers'] = {lm.spec['layers']} for {lm.name}, "
+                f"but the loaded model has {n_blocks} blocks, so every depth percentile is "
+                f"mis-mapped ({self.map} vs {truth}). Fix MODEL_SPECS before running."
+            )
+        try:
+            for pct, idx in self.map.items():
+                if not 0 <= idx <= n_blocks:
+                    raise RuntimeError(
+                        f"ActivationTap: percentile {pct} maps to block {idx}, outside "
+                        f"[0, {n_blocks}] for {lm.name}."
+                    )
+                module = base.embed_tokens if idx == 0 else base.layers[idx - 1]
+                self._handles.append(module.register_forward_hook(self._make_hook(pct)))
+        except Exception:
+            # Hooks registered before the failure would otherwise stay attached
+            # to the model for the life of the process, with no handle left to
+            # remove them.
+            self.close()
+            raise
 
     def _make_hook(self, pct: int) -> Callable:
         def hook(_module, _inp, out):
+            if self.frozen:
+                return
             h = out[0] if isinstance(out, tuple) else out
-            # left padding => index -1 is the true last prompt token for all rows
-            self.buffer[pct] = h[:, -1, :].detach().to(torch.float32).cpu()
+            if self._index is None:
+                sel = h[:, -1, :]
+            else:
+                idx = self._index.to(h.device)
+                sel = h[torch.arange(h.shape[0], device=h.device), idx, :]
+            self.buffer[pct] = sel.detach().to(torch.float32).cpu()
         return hook
+
+    def arm(self, attention_mask: "torch.Tensor") -> None:
+        """Open the tap for one prefill pass over this batch."""
+        self._index = last_prompt_index(attention_mask)
+        self.buffer = {}
+        self.frozen = False
+
+    def freeze(self) -> None:
+        self.frozen = True
 
     def pop(self) -> dict[int, np.ndarray]:
         out = {p: t.numpy() for p, t in self.buffer.items()}
@@ -1580,6 +1838,28 @@ class ActivationTap:
     def __exit__(self, *exc):
         self.close()
         return False
+
+
+@torch.no_grad()
+def prefill_capture(lm: LoadedModel, enc: dict, tap: ActivationTap) -> dict[int, np.ndarray]:
+    """One forward pass over the prompt through the transformer body, with the
+    tap armed. Returns last-prompt-token activations and leaves the tap FROZEN,
+    so the `generate()` call that follows cannot overwrite them."""
+    body = _transformer_base(lm.model)
+    tap.arm(enc["attention_mask"])
+    try:
+        body(input_ids=enc["input_ids"], attention_mask=enc["attention_mask"], use_cache=False)
+    finally:
+        tap.freeze()
+    acts = tap.pop()
+    missing = sorted(set(tap.map) - set(acts))
+    if missing:
+        raise RuntimeError(
+            f"ActivationTap: prefill produced no activation at percentiles {missing} "
+            f"for {lm.name}. Hooks did not fire — the tapped modules are not on the "
+            f"forward path of {type(body).__name__}."
+        )
+    return acts
 
 
 def finiteness_stats(arr: np.ndarray) -> dict:
@@ -1605,14 +1885,176 @@ def finiteness_stats(arr: np.ndarray) -> dict:
 # ============================================================================
 
 
+def _stop_token_ids(tok, model) -> set[int]:
+    """Every id that terminates a sequence, so trailing padding is excluded
+    from both the log-probability sum and the length it is divided by."""
+    ids: set[int] = set()
+    for v in (getattr(tok, "pad_token_id", None), getattr(tok, "eos_token_id", None),
+              getattr(getattr(model, "generation_config", None), "eos_token_id", None),
+              getattr(getattr(model, "generation_config", None), "pad_token_id", None)):
+        if isinstance(v, int):
+            ids.add(v)
+        elif isinstance(v, (list, tuple, set)):
+            ids.update(int(x) for x in v if isinstance(x, int))
+    return ids
+
+
+@torch.no_grad()
+def sequence_logprobs(lm: LoadedModel, sequences: "torch.Tensor", prompt_len: int,
+                      stop_ids: "set[int]", attention_mask: "torch.Tensor | None" = None,
+                      row_chunk: int = 4, tok_chunk: int = 64) -> list[float]:
+    """Mean per-token log-probability of each generated continuation, under the
+    model's OWN distribution.
+
+    PLAN §5 weights semantic clusters by probability mass rather than sample
+    counts — the difference between Kuhn-style semantic entropy and a histogram
+    of ten strings (AUDIT finding 3: zero log-probabilities were computed
+    anywhere).
+
+    Why a separate teacher-forced pass, rather than reading them off generation:
+
+    * `output_scores=True` makes `generate()` retain one
+      `[batch x n_return, vocab]` float tensor **per generated token**. At
+      Qwen2.5's ~152k vocabulary a 512-new-token N=10 sampling batch is tens of
+      gigabytes — more than the KV cache `auto_batch_size` budgets for, and on
+      some cells more than the card holds. CELL 10 already refuses
+      `output_hidden_states=True` for exactly this reason.
+    * A `LogitsProcessor` avoids that cost but does not see a well-defined
+      quantity: HF applies custom processors *before* the sampling warpers, so
+      it reads logits with `repetition_penalty` applied but not temperature or
+      top-p — neither the model likelihood nor the sampler's distribution, and
+      the ordering is an implementation detail that can change between
+      versions. Measured directly: it differs from both.
+
+    So the likelihood is recomputed exactly. This is the raw model
+    distribution, unwarped by SAMPLE_TEMPERATURE / SAMPLE_TOP_P, which is the
+    quantity the semantic-entropy literature uses.
+
+    Length-normalised (mean, not sum): a long correct answer must not rank
+    below a short wrong one purely for being long.
+
+    Cost, stated plainly: this pass sees `prompt_len + max_new` token positions
+    per row, against `max_new` for the whole decode loop — roughly 2.7x (C3) to
+    6x (R1) the positions, i.e. it about doubles the ARITHMETIC of the SAMPLE
+    stage.
+
+    In wall clock that is ~1.35x at batch size 1, where decode is
+    memory-bandwidth bound and this pass is not — but it approaches the full
+    2x at the batch sizes `auto_batch_size` actually picks (7-8 for the 7B
+    models), because at those sizes decode has crossed into compute-bound too
+    and the bandwidth discount disappears. It is the largest single cost added
+    by the log-probability repair, and `ENTROPY_LP_WEIGHTED=False` turns it
+    off. The measured `compute_ledger` captures it; the a-priori budget
+    estimate does not.
+
+    Memory is bounded by asking for only the tail of the logits
+    (`logits_to_keep`) and by chunking over rows and over time. `tok_chunk`
+    bounds only the float32 copy; the `[row_chunk, kept_positions, vocab]`
+    tensor the forward pass returns is what `row_chunk` bounds.
+
+    `attention_mask` is REQUIRED whenever prompts were padded, which is always:
+    the tokenizer pads left, and `generate()`'s output keeps that padding. A
+    plain forward without the mask lets every row attend to its own pad tokens
+    AND numbers positions from 0 instead of from the first real token, so RoPE
+    shifts. Measured on a mixed-length batch, the padded row's score moved by
+    1e-2 while the unpadded row was exact — small enough to look like noise and
+    wrong on exactly the rows with the shortest prompts.
+    """
+    n_rows = int(sequences.shape[0])
+    total_len = int(sequences.shape[1])
+    if total_len <= prompt_len:
+        return [float("nan")] * n_rows
+    if attention_mask is None:
+        attention_mask = torch.ones_like(sequences)
+    elif attention_mask.shape != sequences.shape:
+        raise ValueError(
+            f"sequence_logprobs: attention_mask {tuple(attention_mask.shape)} does not match "
+            f"sequences {tuple(sequences.shape)} — it must cover prompt AND continuation.")
+    # Same position numbering generate() uses under left padding.
+    position_ids = (attention_mask.long().cumsum(-1) - 1).clamp(min=0)
+    out: list[float] = []
+    base = lm.model
+    rc = max(1, int(row_chunk))
+    r0 = 0
+    while r0 < n_rows:
+        sl = sequences[r0 : r0 + rc]
+        am = attention_mask[r0 : r0 + rc]
+        pos = position_ids[r0 : r0 + rc]
+        want_positions = int(sl.shape[1]) - prompt_len + 1     # continuation + its predictor
+        try:
+            try:
+                # Ask for only the tail of the logits. The prompt-position
+                # logits are sliced away immediately anyway, and they are most
+                # of the tensor: at C3 sizes this is the difference between
+                # 1.48 GB and 0.55 GB per chunk.
+                logits = base(input_ids=sl, attention_mask=am, position_ids=pos,
+                              use_cache=False, logits_to_keep=want_positions).logits
+                trimmed = int(logits.shape[1]) == want_positions
+            except TypeError:
+                logits = base(input_ids=sl, attention_mask=am, position_ids=pos,
+                              use_cache=False).logits
+                trimmed = False
+        except torch.cuda.OutOfMemoryError:
+            # A [rows, seq, 152k] logits tensor is the whole reason this is
+            # chunked; back off the same way the generation loop does.
+            free_cuda()
+            if rc == 1:
+                LOG.log("logprob_skip", rows=int(sl.shape[0]),
+                        note="OOM at row_chunk=1 — these samples fall back to count weighting")
+                out += [float("nan")] * int(sl.shape[0])
+                r0 += 1
+                continue
+            rc = max(1, rc // 2)
+            LOG.log("logprob_backoff", new_row_chunk=rc)
+            continue
+        tgt = sl[:, prompt_len:]                                   # [b, T]
+        # position t of the continuation was predicted from index t-1
+        pred = (logits[:, :-1, :] if trimmed
+                else logits[:, prompt_len - 1 : total_len - 1, :])  # [b, T, V]
+        b, T = tgt.shape
+        got = torch.empty((b, T), dtype=torch.float32, device=tgt.device)
+        for t0 in range(0, T, max(1, tok_chunk)):
+            sub = pred[:, t0 : t0 + max(1, tok_chunk), :].to(torch.float32)
+            ids = tgt[:, t0 : t0 + max(1, tok_chunk)]
+            chosen = sub.gather(-1, ids.unsqueeze(-1)).squeeze(-1)
+            got[:, t0 : t0 + ids.shape[1]] = chosen - torch.logsumexp(sub, dim=-1)
+            del sub
+        del logits, pred
+        # Everything at and after the first stop token is padding.
+        stop = torch.zeros_like(tgt, dtype=torch.bool)
+        for sid in stop_ids:
+            stop |= (tgt == sid)
+        alive = (~stop).to(torch.int32).cumprod(dim=1).bool()
+        cnt = alive.sum(dim=1)
+        tot = (got * alive).sum(dim=1)
+        out += [float(t / c) if int(c) > 0 else float("nan") for t, c in zip(tot, cnt)]
+        r0 += int(sl.shape[0])
+    return out
+
+
 @torch.no_grad()
 def generate_batch(lm: LoadedModel, prompts: list[str], max_new_tokens: int,
                    temperature: float, top_p: float, n_return: int,
-                   tap: "ActivationTap | None" = None) -> tuple[list[list[str]], dict]:
+                   tap: "ActivationTap | None" = None
+                   ) -> tuple[list[list[str]], dict, "list[list[float]] | None"]:
     tok = lm.tokenizer
     enc = tok(prompts, return_tensors="pt", padding=True, truncation=True, max_length=1536)
     enc = {k: v.to(lm.hidden_device) for k, v in enc.items()}
+
+    # PLAN §6 / CHANGESforPLANv3 §4: the internal signal is a PRE-GENERATION
+    # reading of the prompt. Capture it in its own forward pass BEFORE decode
+    # starts, then freeze the tap. Reading the hook buffer after `generate()`
+    # — as this did until the audit — returns the last GENERATED token instead,
+    # which is a during-generation probe of a different quantity entirely.
+    acts = prefill_capture(lm, enc, tap) if tap is not None else {}
+
     do_sample = temperature and temperature > 0
+    # Sequence log-probs only matter for the multi-sample entropy pass. They
+    # come from a separate teacher-forced pass rather than `output_scores=True`
+    # — see `sequence_logprobs` for why that flag would cost tens of gigabytes
+    # on this grid, and why a logits processor does not measure a well-defined
+    # quantity either.
+    want_lp = bool(n_return > 1)
     gen_kwargs = dict(
         max_new_tokens=max_new_tokens,
         do_sample=bool(do_sample),
@@ -1623,11 +2065,26 @@ def generate_batch(lm: LoadedModel, prompts: list[str], max_new_tokens: int,
     if do_sample:
         gen_kwargs.update(temperature=float(temperature), top_p=float(top_p))
     out = lm.model.generate(**enc, **gen_kwargs)
-    acts = tap.pop() if tap is not None else {}
     plen = enc["input_ids"].shape[1]
+    if want_lp:
+        # generate() expands each prompt into n_return rows in order, so the
+        # prompt mask repeats the same way. The continuation is all-real for
+        # scoring purposes: causal attention means a trailing pad can only
+        # affect positions after it, and those are dropped by the stop mask.
+        pm = enc["attention_mask"].repeat_interleave(n_return, dim=0) if n_return > 1 \
+            else enc["attention_mask"]
+        full_mask = torch.cat(
+            [pm, torch.ones((out.shape[0], out.shape[1] - plen), dtype=pm.dtype, device=pm.device)],
+            dim=1)
+        logprobs = sequence_logprobs(lm, out, plen, _stop_token_ids(tok, lm.model),
+                                     attention_mask=full_mask)
+    else:
+        logprobs = None
     texts = tok.batch_decode(out[:, plen:], skip_special_tokens=True)
     grouped = [texts[i * n_return : (i + 1) * n_return] for i in range(len(prompts))]
-    return grouped, acts
+    lp_grouped = ([logprobs[i * n_return : (i + 1) * n_return] for i in range(len(prompts))]
+                  if logprobs is not None else None)
+    return grouped, acts, lp_grouped
 
 
 def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, cfg: Config,
@@ -1658,8 +2115,8 @@ def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, 
             prompts = [build_prompt(variant, it["question"], tier_spec, lm.spec, lm.tokenizer, cfg)
                        for it in chunk]
             try:
-                gens, acts = generate_batch(lm, prompts, tier_spec["max_new_tokens"], temp,
-                                            cfg.SAMPLE_TOP_P, n_return, tap)
+                gens, acts, lps = generate_batch(lm, prompts, tier_spec["max_new_tokens"], temp,
+                                                 cfg.SAMPLE_TOP_P, n_return, tap)
             except torch.cuda.OutOfMemoryError:
                 free_cuda()
                 stats["oom_backoffs"] += 1
@@ -1688,6 +2145,8 @@ def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, 
                                 else parsed[0]["parse_ok"],
                     "config_hash": cfg.hash(), "code_sha": PROV["code_sha"], "seed": cfg.SEED,
                 }
+                if lps is not None:
+                    rec["seq_logprob"] = [None if not np.isfinite(x) else float(x) for x in lps[j]]
                 if cfg.SAVE_RAW_TEXT:
                     rec["raw"] = texts if n_return > 1 else texts[0]
                 ckpt.add(rec)
@@ -1843,10 +2302,41 @@ def stage_sample(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str]) 
     return out
 
 
+def assert_prompt_alignment(lm: LoadedModel, bank: dict, cfg: Config,
+                             a: str = "SAMPLE", b: str = "EXTRACT") -> None:
+    """Two variants that are meant to share a generation context must RENDER
+    identically, not merely be written to.
+
+    AUDIT finding 4: each signal is measured on a different generation, and
+    accuracy differs by up to 12 points across variants. SAMPLE and EXTRACT
+    share an `instruction()` branch and a FEWSHOT_POOL entry today, so the
+    behavioral and internal signals read the same context — but nothing
+    enforced that, and a one-line edit to either branch would silently
+    decouple them. This fails loudly at runtime instead.
+    """
+    for tier in cfg.active_tiers():
+        spec = TIER_SPECS[tier]
+        items = cell_items(bank, tier, "all")[:1]
+        if not items:
+            continue
+        q = items[0]["question"]
+        pa = build_prompt(a, q, spec, lm.spec, lm.tokenizer, cfg)
+        pb = build_prompt(b, q, spec, lm.spec, lm.tokenizer, cfg)
+        if pa != pb:
+            raise RuntimeError(
+                f"prompt drift between {a} and {b} on tier {tier} for {lm.name}. "
+                f"These variants must render byte-identically or the behavioral and internal "
+                f"signals are measured on different generations (AUDIT finding 4).\n"
+                f"--- {a} ---\n{pa!r}\n--- {b} ---\n{pb!r}")
+    LOG.log("prompt_alignment_ok", model=lm.name, variants=[a, b],
+            tiers=list(cfg.active_tiers()))
+
+
 def stage_extract(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str]) -> dict:
     """Signal 3 — single greedy pass, five percentile taps at the last prompt
     token (PLAN §6). Uses the SAMPLE prompt so the probe reads a plain
     answering context, not a confidence-elicitation context."""
+    assert_prompt_alignment(lm, bank, cfg)
     out = {}
     for tier in cfg.active_tiers():
         if cell_id(lm.name, tier) not in committed:
@@ -1883,11 +2373,25 @@ def evaluate_band_gate(bank: dict, cfg: Config, nli: "NLIGrader | None") -> dict
             verdicts[cell_id(model, tier)] = {
                 "model": model, "tier": tier, "n": n_tot, "accuracy": round(acc, 4),
                 "band": [lo, hi], "in_band": in_band, "committed": committed,
+                "pilot_accuracy": round(acc, 4),
                 "parse_rate": round(float(np.mean([r["parse_ok"] for r in recs])), 4),
             }
     json_write(PATHS["derived"] / "cell_commitments.json", verdicts)
     n_c = sum(v["committed"] for v in verdicts.values())
-    LOG.log("band_gate", cells=len(verdicts), committed=n_c, ragged=len(verdicts) - n_c)
+    n_out = sum(1 for v in verdicts.values() if not v["in_band"])
+    LOG.log("band_gate", cells=len(verdicts), committed=n_c, ragged=len(verdicts) - n_c,
+            out_of_band_but_committed=(n_out if cfg.COMMIT_CELLS_OUTSIDE_BAND else 0),
+            mode=("covariate" if cfg.COMMIT_CELLS_OUTSIDE_BAND else "deletion"))
+    if cfg.COMMIT_CELLS_OUTSIDE_BAND and n_out:
+        # Conditioning cell inclusion on accuracy is a legitimate base-rate
+        # control and is this project's best claim to novelty. DELETING cells
+        # is the wrong way to implement it — it removed R2, R3, 0.5B and 5/6 of
+        # C3 on an n=100 pilot whose estimates moved by 16 points between runs
+        # (AUDIT finding 9). The band is kept as a covariate; the control is
+        # applied by difficulty matching and by the GLMM's cell intercepts.
+        LOG.log("band_gate_as_covariate", out_of_band=n_out,
+                note="cells outside the 25-80% band are COMMITTED and flagged in_band=False; "
+                     "base-rate control is applied statistically, not by deletion")
     return verdicts
 
 
@@ -1938,12 +2442,91 @@ def stage_grade(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFram
     return df
 
 
+def math_equal(a: str, b: str) -> bool:
+    """Symbolic/numeric equivalence between two MODEL answers.
+
+    Reuses `grade_latex`, the same oracle the grader uses against gold, so an
+    answer pair that would both be marked correct can never land in two
+    different semantic clusters. Checked in both directions because
+    `grade_latex`'s normalise-and-contain fallbacks are not symmetric.
+
+    AUDIT finding 3: NLI merging was gated on answer_form in {short, entity},
+    so all nine committed GSM8K/MATH cells clustered by exact string alone —
+    "0.5", "1/2" and "\\frac{1}{2}" counted as three distinct beliefs and
+    inflated the entropy of a model that never wavered.
+    """
+    if not a or not b:
+        return False
+    try:
+        if grade_latex(a, [b]) or grade_latex(b, [a]):
+            return True
+    except Exception:                                    # noqa: BLE001
+        pass
+    # `grade_latex`'s no-math_verify fallback cannot evaluate \frac{a}{b}: it
+    # strips the macro and hands sympy "(1)(2)", which raises. Without this
+    # guard, clustering quality would depend on whether an optional package
+    # happened to install — so evaluate both sides numerically as a last resort.
+    return _numeric_equal(a, b)
+
+
+def _numeric_equal(a: str, b: str, tol: float = 1e-9) -> bool:
+    """Both sides reduced to a FINITE real number, if they reduce at all.
+
+    Absolute tolerance, deliberately. A relative tolerance merges answers that
+    are genuinely different: at 1e12 a 1e-9 relative bound is +/-1000, so
+    1000000000000 and 1000000000500 would land in one semantic cluster, and
+    union-find would then chain a whole run of large integers together —
+    under-counting entropy and overstating behavioral confidence on exactly the
+    MATH L4-5 answers where large integers appear. Two spellings of the same
+    number differ by float-rounding noise, which absolute 1e-9 already covers
+    (1/3 vs 0.3333333333 differ by ~3e-11).
+
+    Non-finite values are rejected outright: with vb = +/-inf the tolerance
+    bound is itself inf, so inf <= inf holds and +inf would merge with -inf.
+    """
+    def val(s: str) -> "float | None":
+        t = normalize_math(s)
+        m = re.fullmatch(r"\\frac\{(-?[\d.]+)\}\{(-?[\d.]+)\}", t) or \
+            re.fullmatch(r"(-?[\d.]+)/(-?[\d.]+)", t)
+        try:
+            if m:
+                den = float(m.group(2))
+                return float(m.group(1)) / den if den else None
+            return float(t)
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None
+    va, vb = val(a), val(b)
+    if va is None or vb is None:
+        return False
+    if not (np.isfinite(va) and np.isfinite(vb)):
+        return False
+    return abs(va - vb) <= tol
+
+
+def _union_find_merge(keys: list[int], should_merge: Callable[[int, int], bool]) -> dict[int, int]:
+    """Merge cluster keys pairwise under `should_merge`; returns key -> root."""
+    parent = {k: k for k in keys}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(len(keys)):
+        for j in range(i + 1, len(keys)):
+            a, b = keys[i], keys[j]
+            if find(a) != find(b) and should_merge(a, b):
+                parent[find(a)] = find(b)
+    return {k: find(k) for k in keys}
+
+
 def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
-                     nli: "NLIGrader | None") -> list[int]:
-    """Fast path: normalised string identity. Robust path: bidirectional NLI
-    entailment + agglomerative merge (PLAN §5·2)."""
-    norm = [normalize_math(a) if answer_form == "latex" else normalize_text(a, cfg.STRIP_ARTICLES)
-            for a in answers]
+                     nli: "NLIGrader | None", question: str = "") -> list[int]:
+    """Fast path: normalised string identity. Then math equivalence for
+    symbolic forms. Then bidirectional NLI entailment (PLAN §5·2)."""
+    norm = [normalize_math(a) if answer_form in ("latex", "numeric")
+            else normalize_text(a, cfg.STRIP_ARTICLES) for a in answers]
     labels: list[int] = []
     reps: list[str] = []
     for a, n in zip(answers, norm):
@@ -1956,19 +2539,43 @@ def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
             reps.append(n)
             hit = len(reps) - 1
         labels.append(hit)
-    if not (cfg.USE_NLI_FALLBACK and nli is not None and answer_form in ("short", "entity")):
-        return labels
-    if len(reps) < 2:
-        return labels
-    # Merge string-distinct clusters that entail each other both ways.
-    originals = {}
+
+    def relabel(remap: dict[int, int], labs: list[int]) -> list[int]:
+        canon = {v: i for i, v in enumerate(sorted(set(remap.values())))}
+        return [canon[remap[l]] for l in labs]
+
+    originals: dict[int, str] = {}
     for a, l in zip(answers, labels):
         originals.setdefault(l, a)
     keys = sorted(originals)
+
+    # --- symbolic equivalence (GSM8K / MATH), BEFORE the NLI pass ----------
+    if answer_form in ("latex", "numeric") and len(keys) >= 2:
+        remap = _union_find_merge(keys, lambda a, b: math_equal(originals[a], originals[b]))
+        labels = relabel(remap, labels)
+        originals = {}
+        for a, l in zip(answers, labels):
+            originals.setdefault(l, a)
+        keys = sorted(originals)
+
+    # --- NLI entailment; now reachable for math forms too -----------------
+    nli_forms = ("short", "entity", "latex", "numeric")
+    if not (cfg.USE_NLI_FALLBACK and nli is not None and answer_form in nli_forms):
+        return labels
+    if len(keys) < 2:
+        return labels
+    # Give the entailment model the same context `NLIGrader.grade` gives it.
+    # Without the question, deberta-large-mnli is asked whether the bare string
+    # "18" entails the bare string "72" — a judgement it has no basis for. With
+    # it, the pair reads as two answers to the same question.
+    def framed(x: str) -> str:
+        return f"{question} {x}".strip() if question else x
+
     pairs, meta = [], []
     for i in range(len(keys)):
         for j in range(i + 1, len(keys)):
-            pairs += [(originals[keys[i]], originals[keys[j]]), (originals[keys[j]], originals[keys[i]])]
+            a_txt, b_txt = originals[keys[i]], originals[keys[j]]
+            pairs += [(framed(a_txt), framed(b_txt)), (framed(b_txt), framed(a_txt))]
             meta.append((keys[i], keys[j]))
     if not pairs:
         return labels
@@ -1976,58 +2583,171 @@ def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
         s = nli.entails(pairs)
     except Exception:                                   # noqa: BLE001
         return labels
-    parent = {k: k for k in keys}
+    verdict = {pair: bool(min(s[2 * idx], s[2 * idx + 1]) >= cfg.NLI_ENTAIL_THRESHOLD)
+               for idx, pair in enumerate(meta)}
+    if answer_form in ("latex", "numeric"):
+        # `math_equal` already made every merge the grading oracle would make,
+        # so an ADDITIONAL merge here joins two mathematically distinct answers.
+        # Sometimes right (different renderings the oracle could not parse),
+        # often not — either way it must be visible, not silent.
+        extra = [(originals[a], originals[b]) for (a, b), v in verdict.items() if v]
+        if extra:
+            LOG.log("nli_merged_math_answers", answer_form=answer_form,
+                    n_merges=len(extra), pairs=extra[:10],
+                    note="these answers are NOT equal under the symbolic oracle; "
+                         "set USE_NLI_FALLBACK=False to disable")
+    remap = _union_find_merge(
+        keys, lambda a, b: verdict.get((a, b), False) or verdict.get((b, a), False))
+    return relabel(remap, labels)
 
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
 
-    for idx, (a, b) in enumerate(meta):
-        if min(s[2 * idx], s[2 * idx + 1]) >= cfg.NLI_ENTAIL_THRESHOLD:
-            parent[find(a)] = find(b)
-    remap = {k: find(k) for k in keys}
-    canon = {v: i for i, v in enumerate(sorted(set(remap.values())))}
-    return [canon[remap[l]] for l in labels]
+def cluster_mass(labels: list[int], logprobs: "list[float] | None",
+                 cfg: Config) -> tuple[np.ndarray, bool]:
+    """Probability mass per semantic cluster.
+
+    Two weightings:
+
+    * **counts** — a cluster's mass is how many samples landed in it. This is
+      what the pipeline did before the audit: a histogram of ten strings.
+    * **length-normalised likelihood** — a cluster's mass is the summed
+      `exp(mean per-token log-probability)` of its members, i.e. the summed
+      GEOMETRIC-MEAN per-token probability. This is length normalisation in
+      Kuhn's sense, and it is deliberately NOT the raw sequence likelihood:
+      un-normalised, a 200-token chain-of-thought is astronomically less
+      likely than a 3-token answer purely for being longer, and the long
+      cluster would vanish regardless of how confident the model was.
+
+    The consequence of normalising is worth stating plainly: a cluster can hold
+    fewer samples than another and still carry more mass. That is the intended
+    behaviour — it is what "weight by probability, not by count" means — but it
+    is why `modal_share` (a sample fraction) and `modal_mass` (a mass fraction)
+    are reported as two different columns rather than one.
+
+    Falls back to counts for checkpoints written before log-probs were
+    recorded, and reports which path was taken.
+    """
+    keys = sorted(set(labels))
+    counts = np.array([sum(1 for l in labels if l == k) for k in keys], dtype=float)
+    if not cfg.ENTROPY_LP_WEIGHTED or not logprobs:
+        return counts, False
+    lp = np.array([np.nan if x is None else float(x) for x in logprobs], dtype=float)
+    if len(lp) != len(labels) or not np.isfinite(lp).all():
+        return counts, False
+    shift = float(np.max(lp))                    # shared shift, for numerical range only
+    w = np.exp(lp - shift)
+    mass = np.array([w[[i for i, l in enumerate(labels) if l == k]].sum() for k in keys],
+                    dtype=float)
+    if not np.isfinite(mass).all() or mass.sum() <= 0:
+        return counts, False
+    return mass, True
 
 
 def stage_entropy(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFrame:
     """Shannon entropy over semantic cluster mass -> behavioral confidence."""
     rows = []
+    n_req = int(cfg.N_SAMPLES)
+    # PLAN §5 asks for confidence relative to N=10 REQUESTED samples. Dividing
+    # by log(n_valid) instead let a question with a single parsed sample score
+    # a perfect 1.0 — maximum confidence certified by one observation (AUDIT
+    # finding 3, 7.9% of rows). The denominator is now fixed across questions,
+    # and a question below ENTROPY_MIN_VALID is NaN rather than guessed at.
+    H_max_fixed = float(np.log(n_req)) if n_req > 1 else 0.0
     for model in cfg.active_models():
         for tier in cfg.active_tiers():
             recs = jsonl_read(raw_path("sample", model, tier))
             if not recs:
                 continue
             gold = {r["qid"]: r for r in bank[tier]}
+
+            # ---- per-cell weighting decision, BEFORE scoring anything ----
+            # `confidence_behavioral` is calibrated per cell and median-split
+            # per cell, so the whole cell has to be on one scale. A resumed run
+            # mixes records: those written before log-probs existed have none,
+            # and RESUME skips re-generating them. Counting some questions and
+            # weighting others would fit one calibrator over two different
+            # quantities, so the cell falls back to counts wholesale.
+            def _has_lp(r: dict) -> bool:
+                """Does this record have a usable log-prob for every sample that
+                will actually be CLUSTERED?
+
+                Requiring all N to be finite is far too strict: a sample whose
+                continuation begins with a stop token scores NaN, and that same
+                sample produced no parseable answer, so `keep` discards it
+                anyway. The OOM path writes NaN for the same reason. At
+                N_PER_CELL=1000 one such sample somewhere in the cell is close
+                to certain, and it would silently switch the entire cell back to
+                count weighting — disabling the Rao-Blackwellisation this repair
+                exists to add, with a single log line as the only evidence.
+                """
+                lp = r.get("seq_logprob")
+                parsed = r["parsed"] if isinstance(r["parsed"], list) else [r["parsed"]]
+                if not (isinstance(lp, list) and len(lp) == len(parsed)):
+                    return False
+                kept = [i for i, pp in enumerate(parsed) if pp.get("answer")]
+                if not kept:
+                    return True            # nothing to weight; not evidence of a problem
+                return all(lp[i] is not None and np.isfinite(float(lp[i])) for i in kept)
+
+            n_with_lp = sum(1 for r in recs if _has_lp(r))
+            cell_lp_ok = bool(cfg.ENTROPY_LP_WEIGHTED and n_with_lp == len(recs) and len(recs))
+            if cfg.ENTROPY_LP_WEIGHTED and 0 < n_with_lp < len(recs):
+                LOG.log("entropy_mixed_weighting", model=model, tier=tier,
+                        with_logprobs=n_with_lp, total=len(recs),
+                        note="cell falls back to COUNT weighting so one calibrator is not fit "
+                             "over two scales; delete the sample checkpoint to regenerate")
+            cell_cfg = cfg if cell_lp_ok else replace(cfg, ENTROPY_LP_WEIGHTED=False)
+
             for r in tqdm(recs, desc=f"entropy {model[:14]}|{tier}", leave=False):
                 q = gold.get(r["qid"])
                 if q is None:
                     continue
-                answers = [p.get("answer") for p in r["parsed"] if p.get("answer")]
+                parsed = r["parsed"] if isinstance(r["parsed"], list) else [r["parsed"]]
+                raw_lp = r.get("seq_logprob")
+                keep = [i for i, pp in enumerate(parsed) if pp.get("answer")]
+                answers = [parsed[i]["answer"] for i in keep]
+                lps = ([raw_lp[i] for i in keep]
+                       if isinstance(raw_lp, list) and len(raw_lp) == len(parsed) else None)
                 n = len(answers)
+                low_valid = n < int(cfg.ENTROPY_MIN_VALID)
                 if n == 0:
                     rows.append(dict(model=model, tier=tier, qid=r["qid"], split=r["split"],
-                                     n_valid=0, n_clusters=0, entropy=np.nan,
-                                     confidence_behavioral=np.nan, modal_share=np.nan))
+                                     n_valid=0, n_requested=n_req, n_clusters=0, entropy=np.nan,
+                                     entropy_max=H_max_fixed, confidence_behavioral=np.nan,
+                                     modal_share=np.nan, modal_mass=np.nan,
+                                     low_valid=True, lp_weighted=False))
                     continue
-                labels = cluster_answers(answers, q["answer_form"], cfg, nli)
-                sizes = np.array(list(Counter(labels).values()), dtype=float)
+                labels = cluster_answers(answers, q["answer_form"], cell_cfg, nli,
+                                         question=q.get("question", ""))
+                sizes, lp_weighted = cluster_mass(labels, lps, cell_cfg)
                 p = sizes / sizes.sum()
                 H = float(sps.entropy(p))
-                H_max = float(np.log(n)) if n > 1 else 0.0
+                conf = float(1 - H / H_max_fixed) if H_max_fixed > 0 else np.nan
+                counts = np.array([sum(1 for l in labels if l == k) for k in sorted(set(labels))],
+                                  dtype=float)
+                # A question below the valid-sample floor gets no dispersion
+                # estimate at all — and none of the summary statistics that
+                # would otherwise read as certainty. One parsed sample used to
+                # record entropy 0.0 / modal_share 1.0, which is the same
+                # artefact in a different column.
                 rows.append(dict(
                     model=model, tier=tier, qid=r["qid"], split=r["split"], n_valid=n,
-                    n_clusters=int(len(sizes)), entropy=H, entropy_max=H_max,
-                    confidence_behavioral=float(1 - H / H_max) if H_max > 0 else 1.0,
-                    modal_share=float(sizes.max() / sizes.sum()),
+                    n_requested=n_req,
+                    n_clusters=(np.nan if low_valid else int(len(sizes))),
+                    entropy=(np.nan if low_valid else H),
+                    entropy_max=H_max_fixed,
+                    confidence_behavioral=(np.nan if low_valid else conf),
+                    modal_share=(np.nan if low_valid else float(counts.max() / counts.sum())),
+                    modal_mass=(np.nan if low_valid else float(sizes.max() / sizes.sum())),
+                    low_valid=bool(low_valid), lp_weighted=bool(lp_weighted),
                 ))
     df = pd.DataFrame(rows)
     if len(df):
         df.to_parquet(PATHS["derived"] / "entropy.parquet", index=False)
     LOG.log("entropy", rows=len(df),
-            mean_conf=round(float(df["confidence_behavioral"].mean()), 4) if len(df) else None)
+            mean_conf=round(float(df["confidence_behavioral"].mean()), 4) if len(df) else None,
+            low_valid_rows=int(df["low_valid"].sum()) if len(df) else 0,
+            lp_weighted_rows=int(df["lp_weighted"].sum()) if len(df) else 0,
+            min_valid=int(cfg.ENTROPY_MIN_VALID))
     return df
 
 
@@ -2069,13 +2789,21 @@ def load_activations(model: str, tier: str) -> tuple[list[str], dict[int, np.nda
 
 
 def probe_labels(model: str, tier: str, qids: list[str], graded: pd.DataFrame,
-                  entropy: pd.DataFrame, cfg: Config) -> tuple[np.ndarray, np.ndarray]:
+                  entropy: pd.DataFrame, cfg: Config,
+                  split_of: "dict | None" = None) -> tuple[np.ndarray, np.ndarray]:
     """Returns (y, mask). Binary correctness or thresholded semantic entropy."""
     if cfg.PROBE_LABEL == "entropy" and len(entropy):
         sub = entropy[(entropy.model == model) & (entropy.tier == tier)].set_index("qid")
         vals = np.array([sub["confidence_behavioral"].get(q, np.nan) for q in qids], dtype=float)
         mask = np.isfinite(vals)
-        med = np.nanmedian(vals) if mask.any() else 0.5
+        # The median that defines the split is a fitted quantity, so it comes
+        # from TRAIN rows only. Taking it over train+cal+test lets the test
+        # split influence its own labels — a leak that matters more now that
+        # "entropy" is the default probe label.
+        tr_mask = mask & np.array([split_of.get(q) == "train" for q in qids]) \
+            if split_of else mask
+        src_vals = vals[tr_mask] if tr_mask.any() else vals[mask]
+        med = float(np.nanmedian(src_vals)) if src_vals.size else 0.5
         return (vals >= med).astype(int), mask
     # Label priority. EXTRACT is the greedy pass whose activations were tapped,
     # so it is the only variant whose correctness the probe is actually being
@@ -2099,11 +2827,72 @@ def probe_labels(model: str, tier: str, qids: list[str], graded: pd.DataFrame,
     return np.clip(vals, 0, 1), vals >= 0
 
 
-def fit_probe(X: np.ndarray, y: np.ndarray, cfg: Config, seed: int) -> Any:
+def fit_probe(X: np.ndarray, y: np.ndarray, cfg: Config, seed: int, C: float = 1.0) -> Any:
     return make_pipeline(
         StandardScaler(),
-        LogisticRegression(max_iter=cfg.PROBE_MAX_ITER, C=1.0, random_state=seed, n_jobs=None),
+        LogisticRegression(max_iter=cfg.PROBE_MAX_ITER, C=float(C), random_state=seed, n_jobs=None),
     ).fit(X, y)
+
+
+def select_probe_C(X_tr: np.ndarray, y_tr: np.ndarray, cfg: Config,
+                    seed: int, n_folds: int = 3) -> tuple[float, dict]:
+    """Choose the logistic regularisation strength by cross-validation INSIDE
+    the training split.
+
+    `PROBE_C_GRID` was declared and never read: every probe was fit at C=1.0,
+    which on a ~3584-dimensional activation with a few hundred training rows is
+    barely regularised — hence `auroc_train = 1.000` in 51 of 65 rows (AUDIT
+    finding 8).
+
+    The obvious repair — pick C by calibration AUROC — quietly breaks something
+    else. Calibration AUROC is not just a selection statistic here: the same
+    number drives `meets_gate` (>= AUROC_GATE), the winning-percentile choice,
+    and Gate 3. Maximising it over four values of C and then gating on the
+    maximum is selection on the test statistic. Measured on pure noise
+    (200 trials, n=160, d=40), it moved mean calibration AUROC 0.5046 -> 0.5234
+    and the false-pass rate at the 0.65 gate from 1.5% to 4.0%.
+
+    So selection happens inside TRAIN, by k-fold CV, and calibration is left
+    untouched for the roles PLAN §6·6 gives it. Ties break toward the SMALLER C
+    (stronger regularisation), so an uninformative sweep lands on the most
+    constrained probe rather than the most flexible one.
+    """
+    if not cfg.PROBE_C_SELECT or not cfg.PROBE_C_GRID:
+        return 1.0, {"selected_C": 1.0, "method": "fixed", "grid": {}, "n_folds": 0}
+    y_tr = np.asarray(y_tr)
+    classes, counts = np.unique(y_tr, return_counts=True)
+    k = int(min(n_folds, counts.min())) if classes.size >= 2 else 0
+    if k < 2:
+        return 1.0, {"selected_C": 1.0, "method": "too_few_per_class", "grid": {}, "n_folds": 0}
+    rng = np.random.default_rng(seed)
+    # Stratified folds, so every fold keeps both classes.
+    fold = np.empty(len(y_tr), dtype=int)
+    for c in classes:
+        idx = np.where(y_tr == c)[0]
+        fold[rng.permutation(idx)] = np.arange(len(idx)) % k
+    scores: dict[float, float] = {}
+    for C in cfg.PROBE_C_GRID:
+        per_fold = []
+        for f in range(k):
+            tr, va = fold != f, fold == f
+            if len(np.unique(y_tr[tr])) < 2 or len(np.unique(y_tr[va])) < 2:
+                continue
+            try:
+                sc = fit_probe(X_tr[tr], y_tr[tr], cfg, seed, C=C).predict_proba(X_tr[va])[:, 1]
+                per_fold.append(safe_auroc(y_tr[va], sc))
+            except Exception:                             # noqa: BLE001
+                per_fold.append(float("nan"))
+        good = [v for v in per_fold if np.isfinite(v)]
+        scores[float(C)] = float(np.mean(good)) if good else float("nan")
+    finite = {c: v for c, v in scores.items() if np.isfinite(v)}
+    if not finite:
+        return 1.0, {"selected_C": 1.0, "method": "no_finite_auroc",
+                     "grid": {str(k_): None for k_ in scores}, "n_folds": k}
+    best = max(finite.values())
+    chosen = min(c for c, v in finite.items() if v == best)
+    return chosen, {"selected_C": chosen, "method": "train_cv_auroc", "n_folds": k,
+                    "grid": {str(k_): (None if not np.isfinite(v) else round(float(v), 4))
+                             for k_, v in scores.items()}}
 
 
 def safe_auroc(y: np.ndarray, s: np.ndarray) -> float:
@@ -2117,6 +2906,7 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
     """One logistic probe per (cell × percentile). Layer selection happens on
     the CALIBRATION split only (PLAN §6·6, §14.2) — never train, never test."""
     rows = []
+    gate3_blocked: dict[str, dict] = {}
     split_of = {t: {r["qid"]: r["split"] for r in bank[t]} for t in bank}
     qtext = {t: {r["qid"]: r["question"] for r in bank[t]} for t in bank}
 
@@ -2128,8 +2918,9 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
         if loaded is None:
             continue
         qids, mats = loaded
-        y, mask = probe_labels(model, tier, qids, graded, entropy, cfg)
         splits = np.array([split_of[tier].get(q, "train") for q in qids])
+        y, mask = probe_labels(model, tier, qids, graded, entropy, cfg,
+                               split_of=split_of.get(tier, {}))
         fin = json_read(PATHS["acts"] / f"{model}__{tier}.finiteness.json", {})
 
         tr = mask & (splits == "train")
@@ -2138,6 +2929,32 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
         if tr.sum() < 20 or ca.sum() < 10:
             LOG.log("probe_skipped", cell=cid, n_train=int(tr.sum()), n_cal=int(ca.sum()))
             continue
+
+        # Gate 3 is a PRE-check, not a post-hoc note. It used to be computed
+        # and then ignored, so probes were fitted on activations already known
+        # to contain NaN/Inf and the resulting AUROC was reported alongside
+        # clean cells (AUDIT finding 8). Block on both the stored finiteness
+        # record and the arrays actually in hand — a stale or missing
+        # .finiteness.json must not buy a dirty cell a free pass.
+        if cfg.GATE3_ENFORCE:
+            # Element-level, to match the `nonfinite_frac` the finiteness
+            # record stores; row counts are reported alongside so a single bad
+            # row is distinguishable from a systematically corrupt shard.
+            stored_bad = max((v.get("nonfinite_frac", 0.0) for v in fin.values()), default=0.0)
+            runtime_bad = max((float(1.0 - np.isfinite(m).mean()) if m.size else 0.0)
+                              for m in mats.values()) if mats else 0.0
+            bad_rows = {f"p{k}": int((~np.isfinite(m).all(axis=1)).sum())
+                        for k, m in mats.items() if m.size}
+            if stored_bad > 0.0 or runtime_bad > 0.0:
+                gate3_blocked[cid] = {"stored_nonfinite_frac": float(stored_bad),
+                                      "runtime_nonfinite_frac": float(runtime_bad),
+                                      "nonfinite_rows_by_pct": bad_rows,
+                                      "n_rows": int(len(qids))}
+                LOG.log("gate3_block", cell=cid, stored=round(stored_bad, 8),
+                        runtime=round(runtime_bad, 8), nonfinite_rows=bad_rows,
+                        note="dirty activations — probe not fitted (Gate 3). "
+                             "Set GATE3_ENFORCE=False to fit anyway and inspect.")
+                continue
 
         for pct in cfg.PERCENTILES:
             X = mats.get(pct)
@@ -2148,7 +2965,8 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
             if tr_p.sum() < 20 or ca_p.sum() < 10 or len(np.unique(y[tr_p])) < 2:
                 continue
 
-            clf = fit_probe(X[tr_p], y[tr_p], cfg, cfg.SEED)
+            C_sel, C_meta = select_probe_C(X[tr_p], y[tr_p], cfg, cfg.SEED)
+            clf = fit_probe(X[tr_p], y[tr_p], cfg, cfg.SEED, C=C_sel)
             s_tr = clf.predict_proba(X[tr_p])[:, 1]
             s_ca = clf.predict_proba(X[ca_p])[:, 1]
             s_te = clf.predict_proba(X[te_p])[:, 1] if te_p.sum() else np.array([])
@@ -2160,7 +2978,10 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
                 yp = rng.permutation(y[tr_p])
                 if len(np.unique(yp)) < 2:
                     continue
-                null.append(safe_auroc(y[ca_p], fit_probe(X[tr_p], yp, cfg, cfg.SEED).predict_proba(X[ca_p])[:, 1]))
+                # Refit at the SELECTED C: a null fitted at a different
+                # regularisation strength is not a null for this probe.
+                null.append(safe_auroc(y[ca_p], fit_probe(X[tr_p], yp, cfg, cfg.SEED, C=C_sel)
+                                       .predict_proba(X[ca_p])[:, 1]))
             null = np.array([x for x in null if np.isfinite(x)])
 
             # Surface / prompt-only baseline (PLAN §14.1, §17.3)
@@ -2192,35 +3013,92 @@ def stage_probe(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
                 beats_surface=bool(np.isfinite(auroc_surface) and auroc_cal > auroc_surface),
                 nonfinite_frac=fin.get(f"p{pct}", {}).get("nonfinite_frac", 0.0),
                 meets_gate=bool(np.isfinite(auroc_cal) and auroc_cal >= cfg.AUROC_GATE),
+                probe_C=float(C_sel), probe_C_method=C_meta["method"],
+                probe_C_grid=json.dumps(C_meta["grid"]),
             ))
     df = pd.DataFrame(rows)
     if len(df):
         df.to_parquet(PATHS["derived"] / "probe_sweep.parquet", index=False)
-    LOG.log("probe_sweep", rows=len(df), cells=int(df["cell"].nunique()) if len(df) else 0)
+    json_write(PATHS["derived"] / "gate3_blocked_cells.json", gate3_blocked)
+    LOG.log("probe_sweep", rows=len(df), cells=int(df["cell"].nunique()) if len(df) else 0,
+            gate3_blocked=len(gate3_blocked))
     return df
 
 
-def gate3_verdict(sweep: pd.DataFrame, cfg: Config) -> dict:
-    """Per-cell: finiteness pre-check, then >=1 percentile with AUROC >= gate
-    that also beats the shuffle null and the surface baseline."""
+def gate3_verdict(sweep: pd.DataFrame, cfg: Config, blocked: "dict | None" = None) -> dict:
+    """Per-cell: finiteness pre-check, the p0 negative control, then >=1
+    percentile with AUROC >= gate that also beats the shuffle null and the
+    surface baseline.
+
+    The p0 control is the load-bearing one. Percentile 0 is the output of
+    `embed_tokens` at the LAST PROMPT TOKEN — under every prompt template in
+    PLAN §4/§6 that position is a fixed template suffix, and a token embedding
+    carries no position or context, so p0 is the SAME VECTOR for every question
+    in a cell. A probe on a constant cannot separate anything: AUROC must be
+    ~0.50. The pre-audit tap scored 0.717 there, which is exactly how the
+    audit established it was reading a generated token rather than a prompt
+    token. Making this blocking means that class of bug can never again reach
+    a results table unnoticed.
+    """
     out = {}
-    for cell, g in sweep.groupby("cell") if len(sweep) else []:
+    blocked = blocked or {}
+    tol = float(cfg.P0_NEG_CONTROL_TOL)
+    for cell, g in (sweep.groupby("cell") if len(sweep) else []):
         worst_finite = float(g["nonfinite_frac"].max())
         best = g.loc[g["auroc_cal"].idxmax()] if g["auroc_cal"].notna().any() else None
-        passes = bool(best is not None and best["meets_gate"] and best["beats_null"]
-                      and (best["beats_surface"] or not cfg.SURFACE_BASELINE))
+
+        p0 = g[g["layer_pct"] == 0]
+        p0_auroc = float(p0["auroc_cal"].iloc[0]) if len(p0) and np.isfinite(p0["auroc_cal"].iloc[0]) else float("nan")
+        p0_dev = abs(p0_auroc - 0.5) if np.isfinite(p0_auroc) else float("nan")
+        # Absent p0 cannot certify the tap; treat as not-passed, not as passed.
+        p0_ok = bool(np.isfinite(p0_dev) and p0_dev <= tol)
+
+        signal_ok = bool(best is not None and best["meets_gate"] and best["beats_null"]
+                         and (best["beats_surface"] or not cfg.SURFACE_BASELINE))
+        clean = worst_finite == 0.0
+        passes = bool(signal_ok and p0_ok and clean)
+        if not clean:
+            diagnosis = "dirty activations"
+        elif not p0_ok:
+            diagnosis = ("p0 negative control FAILED — the tap is not reading a constant "
+                         "prompt-ending token (see AUDIT finding 1)" if np.isfinite(p0_dev)
+                         else "p0 negative control unavailable — no p0 probe was fitted")
+        elif not signal_ok:
+            diagnosis = "clean activations, no signal"
+        else:
+            diagnosis = "pass"
         out[cell] = {
-            "activations_clean": worst_finite == 0.0, "worst_nonfinite_frac": worst_finite,
+            "activations_clean": clean, "worst_nonfinite_frac": worst_finite,
             "best_layer_pct": int(best["layer_pct"]) if best is not None else None,
             "best_auroc_cal": float(best["auroc_cal"]) if best is not None else None,
             "beats_null": bool(best["beats_null"]) if best is not None else False,
             "beats_surface": bool(best["beats_surface"]) if best is not None else False,
+            "probe_C": (float(pd.to_numeric(best["probe_C"], errors="coerce"))
+                        if best is not None and "probe_C" in best.index
+                        and np.isfinite(pd.to_numeric(best["probe_C"], errors="coerce"))
+                        else None),
+            "p0_neg_control_auroc": None if not np.isfinite(p0_auroc) else p0_auroc,
+            "p0_neg_control_dev": None if not np.isfinite(p0_dev) else float(p0_dev),
+            "p0_neg_control_tol": tol,
+            "p0_neg_control_pass": p0_ok,
+            "signal_ok": signal_ok,
             "passes": passes,
-            "diagnosis": ("clean activations, no signal" if passes is False and worst_finite == 0.0
-                          else "dirty activations" if worst_finite > 0 else "pass"),
+            "diagnosis": diagnosis,
         }
+    for cell, info in blocked.items():
+        out.setdefault(cell, {
+            "activations_clean": False, "worst_nonfinite_frac": info.get("stored_nonfinite_frac", 1.0),
+            "best_layer_pct": None, "best_auroc_cal": None, "beats_null": False,
+            "beats_surface": False, "probe_C": None,
+            "p0_neg_control_auroc": None, "p0_neg_control_dev": None,
+            "p0_neg_control_tol": tol, "p0_neg_control_pass": False, "signal_ok": False,
+            "passes": False,
+            "diagnosis": "blocked before fitting — dirty activations (Gate 3 pre-check)",
+        })
     json_write(PATHS["derived"] / "gate3.json", out)
-    LOG.log("gate3", cells=len(out), passed=sum(v["passes"] for v in out.values()))
+    LOG.log("gate3", cells=len(out), passed=sum(v["passes"] for v in out.values()),
+            p0_control_failures=sum(1 for v in out.values() if not v["p0_neg_control_pass"]),
+            blocked=len(blocked))
     return out
 
 
@@ -2347,6 +3225,49 @@ def spearman_with_ci(a: np.ndarray, b: np.ndarray, n_boot: int, ci: float, seed:
 
 SIGNALS = ("verbal", "behavioral", "internal")
 
+# ---------------------------------------------------------------------------
+# Epistemic-alignment taxonomy for the verbal x behavioral 2x2.
+#
+# "Hopeful confidence" anthropomorphises — it attributes a wish to a model —
+# and the audit is right that it will draw fire at an NLP venue. These names
+# describe the OBSERVED RELATION between two measurements and claim nothing
+# about the model's inner life. Storage keys keep the legacy strings so old
+# artefacts, figures and downstream notebooks keep loading; only the reported
+# labels change.
+# ---------------------------------------------------------------------------
+QUADRANT_TAXONOMY: dict[str, dict] = {
+    "hopeful": {
+        "label": "Performative Certainty",
+        "verbal": "high", "behavioral": "low",
+        "definition": "Stated confidence exceeds sample stability.",
+        "neutral_phrase": "unwarranted stated confidence",
+    },
+    "suppressed": {
+        "label": "Excessive Hedging",
+        "verbal": "low", "behavioral": "high",
+        "definition": "Stated confidence under-reports unanimous sample consensus.",
+        "neutral_phrase": "understated stated confidence",
+    },
+    "agree_high": {
+        "label": "Grounded Certainty",
+        "verbal": "high", "behavioral": "high",
+        "definition": "Stated confidence and sample stability agree, both high.",
+        "neutral_phrase": "congruent high confidence",
+    },
+    "agree_low": {
+        "label": "Honest Doubt",
+        "verbal": "low", "behavioral": "low",
+        "definition": "Stated confidence and sample stability agree, both low.",
+        "neutral_phrase": "congruent low confidence",
+    },
+}
+QUADRANT_LABELS: dict[str, str] = {k: v["label"] for k, v in QUADRANT_TAXONOMY.items()}
+
+
+def quadrant_label(key: str) -> str:
+    """Legacy storage key -> reported taxonomy name."""
+    return QUADRANT_LABELS.get(key, key)
+
 
 def empirical_bucket_map(graded: pd.DataFrame, cfg: Config) -> dict:
     """PLAN §4 / §14.3 manipulation check: bucket -> probability comes from the
@@ -2377,7 +3298,10 @@ def verbal_scores(graded: pd.DataFrame, bmap: dict, cfg: Config) -> pd.DataFrame
     for r in g.itertuples():
         cid = cell_id(r.model, r.tier)
         if r.variant == "A":
-            v = r.confidence
+            # The model's own stated number, parsed /100 upstream. Clipped, not
+            # remapped: this is the canonical label-free verbal axis.
+            v = np.clip(float(r.confidence), 0.0, 1.0) if r.confidence is not None and np.isfinite(
+                pd.to_numeric(r.confidence, errors="coerce")) else np.nan
         elif r.variant == "B":
             v = bmap.get(cid, {}).get(r.bucket, {}).get("p") if r.bucket else np.nan
         else:
@@ -2394,18 +3318,49 @@ def verbal_scores(graded: pd.DataFrame, bmap: dict, cfg: Config) -> pd.DataFrame
         rows.append(dict(model=r.model, tier=r.tier, qid=r.qid, split=r.split,
                          is_agreement=r.is_agreement, variant=r.variant, verbal_raw=v,
                          correct=int(r.correct), decision=r.decision, bucket=r.bucket))
+        if r.variant == "B":
+            # Same utterance, label-free reading (PLAN §4·4 / AUDIT finding 2).
+            rows.append(dict(model=r.model, tier=r.tier, qid=r.qid, split=r.split,
+                             is_agreement=r.is_agreement, variant="Bfix",
+                             verbal_raw=float(BUCKET_FIXED_VALUES[r.bucket]) if r.bucket in BUCKET_FIXED_VALUES
+                                        else np.nan,
+                             correct=int(r.correct), decision=r.decision, bucket=r.bucket))
     return pd.DataFrame(rows)
 
 
 def internal_scores(sweep: pd.DataFrame, bank: dict, graded: pd.DataFrame,
-                     entropy: pd.DataFrame, committed: dict, cfg: Config) -> pd.DataFrame:
+                     entropy: pd.DataFrame, committed: dict, cfg: Config,
+                     gate3: "dict | None" = None) -> pd.DataFrame:
     """Refit the winning-percentile probe and emit per-question test scores.
-    Winner selected on CALIBRATION only (PLAN §6·6)."""
+    Winner selected on CALIBRATION only (PLAN §6·6).
+
+    A cell that fails Gate 3 emits NOTHING. Blocking dirty activations before
+    fitting is only half of enforcement: the p0 negative control and the AUROC
+    gate were still report-only, so a cell whose p0 scored 0.717 — the exact
+    signature of the tap defect in AUDIT finding 1 — was written into
+    `gate3.json` as failed and *simultaneously* contributed 200 per-question
+    `internal_cal` values to H1, H3, H4, the GLMM and the quadrants. A gate
+    nothing downstream honours is a comment.
+    """
     rows = []
     if not len(sweep):
         return pd.DataFrame(rows)
+    if cfg.GATE3_ENFORCE and not gate3:
+        # Fail CLOSED. `gate3=None` used to mean "emit everything", so any call
+        # site that forgot the argument silently disabled the whole enforcement
+        # path this function exists to provide.
+        raise RuntimeError(
+            "internal_scores: GATE3_ENFORCE is on but no Gate 3 verdict was supplied. "
+            "Pass gate3=gate3_verdict(...), or set GATE3_ENFORCE=False deliberately.")
+    gate3 = gate3 or {}
     split_of = {t: {r["qid"]: r["split"] for r in bank[t]} for t in bank}
+    skipped: dict[str, str] = {}
     for cell, g in sweep.groupby("cell"):
+        verdict = gate3.get(cell)
+        if cfg.GATE3_ENFORCE and not (verdict or {}).get("passes"):
+            # A cell with no verdict at all is also not a cell that passed.
+            skipped[cell] = (verdict or {}).get("diagnosis", "no Gate 3 verdict for this cell")
+            continue
         g = g[g["auroc_cal"].notna()]
         if not len(g):
             continue
@@ -2418,30 +3373,48 @@ def internal_scores(sweep: pd.DataFrame, bank: dict, graded: pd.DataFrame,
         X = mats.get(pct)
         if X is None:
             continue
-        y, mask = probe_labels(model, tier, qids, graded, entropy, cfg)
         splits = np.array([split_of[tier].get(q, "train") for q in qids])
+        y, mask = probe_labels(model, tier, qids, graded, entropy, cfg,
+                               split_of=split_of.get(tier, {}))
         fin = np.isfinite(X).all(axis=1)
         tr = mask & fin & (splits == "train")
         if tr.sum() < 20 or len(np.unique(y[tr])) < 2:
             continue
-        clf = fit_probe(X[tr], y[tr], cfg, cfg.SEED)
-        s_all = clf.predict_proba(X)[:, 1]
+        # Refit at the C the sweep selected for this cell/percentile, so the
+        # emitted per-question scores come from the same probe the sweep
+        # reported — not a silently different C=1.0 model.
+        C_sel = float(best["probe_C"]) if "probe_C" in best.index and np.isfinite(
+            pd.to_numeric(best["probe_C"], errors="coerce")) else 1.0
+        clf = fit_probe(X[tr], y[tr], cfg, cfg.SEED, C=C_sel)
+        # Score only the finite rows. `predict_proba` on the full matrix raises
+        # "Input X contains NaN" the moment any row is non-finite — which is
+        # exactly the situation GATE3_ENFORCE=False exists to let you inspect,
+        # so the documented escape hatch used to crash on the case it was for.
+        s_all = np.full(len(qids), np.nan)
+        if fin.any():
+            s_all[fin] = clf.predict_proba(X[fin])[:, 1]
         for i, q in enumerate(qids):
             if not fin[i]:
                 continue
             rows.append(dict(model=model, tier=tier, qid=q, split=splits[i],
-                             internal_raw=float(s_all[i]), best_layer_pct=pct))
+                             internal_raw=float(s_all[i]), best_layer_pct=pct,
+                             probe_C=C_sel))
+    if skipped:
+        LOG.log("internal_scores_gate3_skipped", cells=sorted(skipped), reasons=skipped,
+                note="these cells contribute NO internal signal downstream")
+    json_write(PATHS["derived"] / "internal_gate3_skipped.json", skipped)
     return pd.DataFrame(rows)
 
 
 def assemble_signals(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
-                     sweep: pd.DataFrame, committed: dict, cfg: Config) -> tuple[pd.DataFrame, dict]:
+                     sweep: pd.DataFrame, committed: dict, cfg: Config,
+                     gate3: "dict | None" = None) -> tuple[pd.DataFrame, dict]:
     """Wide table: one row per (model, tier, qid) carrying raw + calibrated
     values for all three signals, plus ground truth. Calibrators fit on the
     calibration split, applied to test (PLAN §8·1–2)."""
     bmap = empirical_bucket_map(graded, cfg)
     verbal = verbal_scores(graded, bmap, cfg)
-    internal = internal_scores(sweep, bank, graded, entropy, committed, cfg)
+    internal = internal_scores(sweep, bank, graded, entropy, committed, cfg, gate3=gate3)
 
     # Canonical verbal format (PLAN §4·4), with the §8·6 pre-flight applied
     # BEFORE selection rather than after.
@@ -2453,35 +3426,99 @@ def assemble_signals(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
     # the degeneracy §8·6 exists to exclude. Brier is used instead because it
     # decomposes into reliability MINUS resolution, so a constant predictor is
     # penalised by its zero resolution.
+    #
+    # Format B may never be canonical. Its raw value IS the empirical accuracy
+    # of the bucket the model chose, fit on the calibration split and then
+    # calibrated again on that same split — a supervised P(correct) estimate,
+    # not something the model said (AUDIT finding 2). It is scored here purely
+    # as a supervised reference, and excluded from selection AND from the
+    # degenerate fallback so it cannot slip in through the back door.
     fmt_stats = {}
-    for v in ("A", "B", "C"):
+    for v in VERBAL_FORMATS:
         s = verbal[(verbal.variant == v) & (verbal.split == "calibration")]
         s = s[s.verbal_raw.notna()]
         nd = int(s.verbal_raw.nunique()) if len(s) else 0
         ok = len(s) >= 20
+        label_free = v in LABEL_FREE_FORMATS
         fmt_stats[v] = {
             "n": int(len(s)), "n_distinct": nd,
             "ece": ece(s.verbal_raw.values, s.correct.values, cfg.ECE_BINS) if ok else float("inf"),
             "brier": brier(s.verbal_raw.values, s.correct.values.astype(float)) if ok else float("inf"),
-            "eligible": bool(ok and nd >= cfg.MIN_DISTINCT_VERBAL),
+            "label_free": label_free,
+            "role": "candidate" if label_free else "supervised_reference",
+            "eligible": bool(ok and nd >= cfg.MIN_DISTINCT_VERBAL and label_free),
         }
-    eligible = [v for v in ("A", "B", "C") if fmt_stats[v]["eligible"]]
+    eligible = [v for v in LABEL_FREE_FORMATS if fmt_stats[v]["eligible"]]
     if eligible:
         canonical = min(eligible, key=lambda v: fmt_stats[v]["brier"])
     else:
-        # Nothing clears the pre-flight: keep the most-varied format so the
-        # pipeline still runs, but the degeneracy is recorded loudly.
-        canonical = max(fmt_stats, key=lambda v: fmt_stats[v]["n_distinct"])
+        # Nothing clears the pre-flight: keep the most-varied LABEL-FREE format
+        # so the pipeline still runs, but the degeneracy is recorded loudly.
+        canonical = max(LABEL_FREE_FORMATS, key=lambda v: fmt_stats[v]["n_distinct"])
         LOG.log("verbal_all_formats_degenerate", chosen=canonical,
                 n_distinct={k: v["n_distinct"] for k, v in fmt_stats.items()})
+    if canonical not in LABEL_FREE_FORMATS:                      # not an assert: -O strips those
+        raise RuntimeError(
+            f"label-derived format {canonical!r} was selected as the canonical verbal axis; "
+            f"only {LABEL_FREE_FORMATS} may be canonical (AUDIT finding 2)")
     fmt_ece = {k: v["ece"] for k, v in fmt_stats.items()}
     LOG.log("canonical_format", chosen=canonical, eligible=eligible,
+            supervised_reference=[v for v in VERBAL_FORMATS if v not in LABEL_FREE_FORMATS],
             brier={k: round(v["brier"], 4) for k, v in fmt_stats.items()},
             ece={k: round(v["ece"], 4) for k, v in fmt_stats.items()},
             n_distinct={k: v["n_distinct"] for k, v in fmt_stats.items()})
 
     v_can = verbal[verbal.variant == canonical][["model", "tier", "qid", "split", "verbal_raw", "correct"]]
     base = v_can.copy()
+
+    # ---- one ground truth for all three signals ------------------------
+    gt_variant = cfg.GROUND_TRUTH_VARIANT
+    acc_by_variant = {str(v): float(g["correct"].mean())
+                      for v, g in graded[graded.sample_idx == 0].groupby("variant")
+                      if len(g)}
+    spread = (max(acc_by_variant.values()) - min(acc_by_variant.values())) if acc_by_variant else float("nan")
+    gt_source = f"canonical_verbal({canonical})"
+    if gt_variant != "canonical_verbal":
+        gt_all = graded[(graded.variant == gt_variant) & (graded.sample_idx == 0)][
+            ["model", "tier", "qid", "correct"]]
+        # De-duplicating silently would turn a data-integrity conflict — the
+        # same question graded two different ways — into an unrecorded coin
+        # flip. Conflicts are counted and named before anything is dropped.
+        conflicts = (gt_all.groupby(["model", "tier", "qid"])["correct"].nunique()
+                     .pipe(lambda x: x[x > 1]))
+        if len(conflicts):
+            LOG.log("ground_truth_conflicts", n=int(len(conflicts)),
+                    examples=[list(map(str, k)) for k in list(conflicts.index)[:10]],
+                    note=f"{gt_variant} grades the same question inconsistently; keeping the "
+                         f"last row per key")
+        n_dupe = int(len(gt_all) - len(gt_all.drop_duplicates(subset=["model", "tier", "qid"])))
+        if n_dupe:
+            LOG.log("ground_truth_duplicates", rows_dropped=n_dupe, variant=gt_variant)
+        gt = (gt_all.drop_duplicates(subset=["model", "tier", "qid"], keep="last")
+              .rename(columns={"correct": "correct_gt"}))
+        if len(gt):
+            n_before = len(base)
+            # `validate` turns a duplicated key into an exception instead of a
+            # silently longer table: an unguarded left merge on a duplicated
+            # (model, tier, qid) multiplies rows, and every per-cell mean and
+            # bootstrap downstream would be computed over the inflated frame.
+            base = base.merge(gt, on=["model", "tier", "qid"], how="left", validate="m:1")
+            if len(base) != n_before:
+                raise RuntimeError(
+                    f"ground-truth merge changed the row count {n_before} -> {len(base)}; "
+                    f"variant {gt_variant} has duplicate (model, tier, qid) keys")
+            n_missing = int(base["correct_gt"].isna().sum())
+            # Fall back per-row rather than silently dropping questions the
+            # ground-truth pass did not answer; the count is recorded.
+            base["correct"] = base["correct_gt"].fillna(base["correct"]).astype(int)
+            base = base.drop(columns=["correct_gt"])
+            gt_source = gt_variant
+            LOG.log("ground_truth_variant", using=gt_variant, rows_backfilled=n_missing,
+                    accuracy_by_variant={k: round(v, 4) for k, v in acc_by_variant.items()},
+                    max_spread=round(spread, 4) if np.isfinite(spread) else None)
+        else:
+            LOG.log("ground_truth_variant_missing", requested=gt_variant,
+                    note="falling back to the canonical verbal pass's correctness")
     if len(entropy):
         base = base.merge(entropy[["model", "tier", "qid", "confidence_behavioral", "n_clusters", "n_valid"]],
                           on=["model", "tier", "qid"], how="left")
@@ -2531,17 +3568,57 @@ def assemble_signals(bank: dict, graded: pd.DataFrame, entropy: pd.DataFrame,
         base.loc[mask, "verbal_raw"] = np.nan
         n_excl += int(mask.sum())
     base["verbal_excluded"] = base["verbal_cal"].isna()
+    # Why an internal value is absent matters: Gate 3 removed the whole cell,
+    # or the activation was non-finite, or the cell had too few training rows.
+    # Without this they are indistinguishable, and the GLMM's
+    # `internal_cal_missing` indicator lumps all three causes together. The
+    # band-gate repair replaced deletion with a covariate; Gate 3 must not
+    # reintroduce deletion without one.
+    _g3_failed = {c for c, v in (gate3 or {}).items() if not v.get("passes")}
+    base["internal_excluded_reason"] = np.where(
+        base["internal_raw"].notna(), None,
+        np.where(base.apply(lambda r: cell_id(r["model"], r["tier"]) in _g3_failed, axis=1),
+                 "gate3_failed", "no_probe_score"))
+    base["internal_excluded"] = base["internal_raw"].isna()
     LOG.log("verbal_preflight", excluded_cells=sum(
         1 for m in cal_meta.values() if m.get("verbal", {}).get("excluded")),
         total_cells=len(cal_meta), excluded_rows=n_excl)
 
+    # Continuous confidence discrepancy. The quadrant split at 0.5 is a fixed
+    # constant, but it is still a knife edge: 4 of the 6 quadrant cells never
+    # had verbal_cal cross it at all, and all 224 "hopeful" cases came from
+    # three cells whose modal bucket sat 1-4 points above the cut (AUDIT
+    # finding 6). Delta carries the same comparison with no cutpoint, so
+    # regressions and effect sizes do not inherit the threshold's arbitrariness.
+    base["delta_verbal_behavioral"] = (base["verbal_cal"].astype(float)
+                                       - base["behavioral_cal"].astype(float))
+    base["delta_verbal_internal"] = (base["verbal_cal"].astype(float)
+                                     - base["internal_cal"].astype(float))
+
     base["family"] = base["tier"].map(lambda t: TIER_SPECS[t]["family"])
     base["params_b"] = base["model"].map(lambda m: MODEL_SPECS[m]["params_b"])
+    # Base-rate covariates: the band gate no longer deletes cells, so the
+    # pilot accuracy it measured travels with the rows instead (AUDIT finding 9).
+    # An unknown cell is UNKNOWN, not in-band. Defaulting to True would hand a
+    # cell with no pilot record the same covariate value as one measured inside
+    # the band.
+    base["in_band"] = base.apply(
+        lambda r: (committed.get(cell_id(r["model"], r["tier"])) or {}).get("in_band", None), axis=1)
+    n_unknown = int(base["in_band"].isna().sum())
+    if n_unknown:
+        LOG.log("in_band_unknown", rows=n_unknown,
+                note="cells with no pilot record — in_band is NaN, not True")
+    base["pilot_accuracy"] = base.apply(
+        lambda r: float((committed.get(cell_id(r["model"], r["tier"])) or {}).get("accuracy", np.nan)), axis=1)
     base["canonical_format"] = canonical
     base.to_parquet(PATHS["derived"] / "signals.parquet", index=False)
     json_write(PATHS["derived"] / "calibration_meta.json",
                {"canonical_format": canonical, "format_ece": fmt_ece,
-                "format_stats": fmt_stats, "cells": cal_meta})
+                "format_stats": fmt_stats, "cells": cal_meta,
+                "label_free_formats": list(LABEL_FREE_FORMATS),
+                "ground_truth_variant": gt_source,
+                "accuracy_by_variant": acc_by_variant,
+                "accuracy_spread_across_variants": (None if not np.isfinite(spread) else float(spread))})
     LOG.log("signals_assembled", rows=len(base), cells=int(base.groupby(["model", "tier"]).ngroups))
     return base, {"canonical_format": canonical, "format_ece": fmt_ece,
                   "format_stats": fmt_stats, "cells": cal_meta,
@@ -2592,6 +3669,52 @@ def test_h1_signal_calibration(signals: pd.DataFrame, cfg: Config) -> dict:
     Δ(best − worst) (PLAN §13 H1)."""
     out = {"per_cell": {}, "pooled": {}}
     test = signals[signals.split == "test"]
+
+    # H1 compares scoring rules ACROSS signals and bootstraps the best-worst
+    # gap, so the comparison is only like-for-like if the signals cover the
+    # same questions. They no longer do by default: Gate 3 enforcement drops a
+    # failing cell's internal signal entirely, which silently shrinks the
+    # internal column's grid. That has to be a reported qualifier on H1, not a
+    # log line — a reader comparing ECE across three columns cannot see it
+    # otherwise.
+    cells_all = {f"{m}__{t}" for m, t in test[["model", "tier"]].drop_duplicates().itertuples(index=False)}
+    coverage: dict[str, dict] = {}
+    for sig in SIGNALS:
+        present = test[test[f"{sig}_cal"].notna()]
+        cells_sig = {f"{m}__{t}" for m, t in
+                     present[["model", "tier"]].drop_duplicates().itertuples(index=False)}
+        coverage[sig] = {"n_rows": int(len(present)), "n_cells": len(cells_sig),
+                         "missing_cells": sorted(cells_all - cells_sig)}
+    common = set.intersection(*[
+        {f"{m}__{t}" for m, t in test[test[f"{s}_cal"].notna()][["model", "tier"]]
+         .drop_duplicates().itertuples(index=False)} for s in SIGNALS]) if len(test) else set()
+    # Cell coverage is not enough. Row-level missingness — behavioral NaN below
+    # ENTROPY_MIN_VALID, internal NaN on a non-finite activation — leaves every
+    # signal present in every cell while the three still score different
+    # questions. The delta is bootstrapped across those row sets, so the check
+    # has to be at row granularity.
+    complete = test[[f"{s_}_cal" for s_ in SIGNALS]].notna().all(axis=1) if len(test) else pd.Series(dtype=bool)
+    n_complete = int(complete.sum())
+    n_rows_by_signal = {s_: coverage[s_]["n_rows"] for s_ in SIGNALS}
+    rows_equal = len(set(n_rows_by_signal.values())) <= 1 and n_complete == max(
+        n_rows_by_signal.values(), default=0)
+    out["coverage"] = {
+        "cells_total": len(cells_all), "per_signal": coverage,
+        "cells_all_three_signals": sorted(common),
+        "cells_equal": bool(len(common) == len(cells_all)),
+        "n_rows_by_signal": n_rows_by_signal,
+        "n_rows_complete_case": n_complete,
+        "n_rows_test": int(len(test)),
+        "like_for_like": bool(len(common) == len(cells_all) and rows_equal),
+    }
+    if not out["coverage"]["like_for_like"]:
+        out["coverage"]["warning"] = (
+            "Signals do not score the same questions, so pooled ECE/Brier/Murphy and the "
+            "best-worst delta are computed over DIFFERENT sets and are not a like-for-like "
+            f"comparison. Cells carrying all three: {len(common)} of {len(cells_all)}. "
+            f"Rows per signal: {n_rows_by_signal}; only {n_complete} of {len(test)} test rows "
+            f"carry all three signals. Use the complete-case subset for any cross-signal claim.")
+
     for sig in SIGNALS:
         d = test[[f"{sig}_cal", "correct"]].dropna()
         if len(d) < 20:
@@ -2603,7 +3726,7 @@ def test_h1_signal_calibration(signals: pd.DataFrame, cfg: Config) -> dict:
                                    cfg.N_BOOTSTRAP, cfg.BOOTSTRAP_CI, cfg.SEED)
         b, blo, bhi = bootstrap_ci(lambda a: brier(a[:, 0], a[:, 1]), pairs,
                                    cfg.N_BOOTSTRAP, cfg.BOOTSTRAP_CI, cfg.SEED)
-        out["pooled"][sig] = {"ece": e, "ece_lo": elo, "ece_hi": ehi,
+        out["pooled"][sig] = {"n": int(len(d)), "ece": e, "ece_lo": elo, "ece_hi": ehi,
                               "brier": b, "brier_lo": blo, "brier_hi": bhi,
                               **murphy_decomposition(p, y, cfg.MURPHY_BINS)}
     for (model, tier), g in test.groupby(["model", "tier"]):
@@ -2676,12 +3799,60 @@ def question_features(bank: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_h2_quadrants(signals: pd.DataFrame, bank: dict, cfg: Config) -> dict:
-    """Quadrant assignment + chi-square vs question features + shuffle null."""
+def replicates_across_cells(per_cell: dict, min_cells: int = 2, alpha: float = 0.05,
+                             p_key: str = "p_conservative") -> dict:
+    """A feature association counts as replicated only if it is significant in
+    at least `min_cells` independent model x tier cells.
+
+    AUDIT finding 6: H2's only passing features (`is_long`, `family`,
+    `has_number`, `has_multi_entity`) are all tier proxies, and the single
+    non-tier feature (`has_year`) fails. A pooled chi-square across cells with
+    very different base rates will find "associations" that are really just
+    cell identity, so a pooled p-value is not evidence about question
+    characteristics at all.
+
+    Uses the Yates-corrected p by default. `beats_null` compares against an
+    uncorrected permutation null and must stay uncorrected to match it, but a
+    claim that a feature GENERALISES should be made on the conservative number.
+    """
+    def pval(v: dict) -> float:
+        x = v.get(p_key, v.get("p", np.nan))
+        return float(x) if x is not None and np.isfinite(x) else np.nan
+    hits = [c for c, v in per_cell.items() if np.isfinite(pval(v)) and pval(v) < alpha]
+    return {"n_cells_tested": len(per_cell), "n_cells_significant": len(hits),
+            "significant_cells": sorted(hits), "min_cells_required": min_cells,
+            "alpha": alpha, "p_used": p_key,
+            "replicates": bool(len(hits) >= min_cells)}
+
+
+def test_h2_quadrants(signals: pd.DataFrame, bank: dict, cfg: Config,
+                      gate1_pass: "bool | None" = None,
+                      gate3: "dict | None" = None) -> dict:
+    """Quadrant assignment + WITHIN-CELL chi-square vs question features,
+    replication across cells, the continuous Delta metric, and the PLAN §16
+    gate conjunct that the pass rule used to drop silently."""
     test = signals[signals.split == "test"].copy()
     thr = cfg.QUADRANT_THRESHOLD
-    other = test[["behavioral_cal", "internal_cal"]].mean(axis=1, skipna=True)
-    test["other_cal"] = other
+    # `other_cal` averages the two non-verbal signals, skipping NaN. That means
+    # a row where behavioral confidence is missing silently becomes
+    # internal-only — a different quantity under the same column name, on rows
+    # that are not a random subset (behavioral is NaN precisely where too few
+    # samples parsed). The composition is recorded per row so the axis is never
+    # read as homogeneous, and quadrant assignment is restricted to rows where
+    # both components exist unless that would empty the table.
+    comp = test[["behavioral_cal", "internal_cal"]].notna().sum(axis=1)
+    test["other_cal"] = test[["behavioral_cal", "internal_cal"]].mean(axis=1, skipna=True)
+    test["other_cal_n_components"] = comp.astype(int)
+    n_partial = int(((comp == 1)).sum())
+    n_both = int((comp == 2).sum())
+    if n_partial and n_both >= 100:
+        test = test[comp == 2].copy()
+        LOG.log("h2_other_cal_restricted", dropped_partial_rows=n_partial, kept=n_both,
+                note="quadrants use rows with BOTH behavioral and internal present")
+    elif n_partial:
+        LOG.log("h2_other_cal_mixed", partial_rows=n_partial, both_rows=n_both,
+                note="too few complete rows to restrict; other_cal mixes one- and "
+                     "two-component values — see other_cal_n_components")
     def quad(row):
         v, o = row["verbal_cal"], row["other_cal"]
         if not np.isfinite(v) or not np.isfinite(o):
@@ -2692,49 +3863,209 @@ def test_h2_quadrants(signals: pd.DataFrame, bank: dict, cfg: Config) -> dict:
             return "suppressed"
         return "agree_high" if v >= thr else "agree_low"
     test["quadrant"] = test.apply(quad, axis=1)
+    test["quadrant_label"] = test["quadrant"].map(lambda k: quadrant_label(k) if k else None)
     feats = question_features(bank)
     merged = test.merge(feats, on=["tier", "qid"], how="left", suffixes=("", "_f"))
     merged = merged[merged.quadrant.notna()]
+    merged["cell"] = merged["model"] + "__" + merged["tier"]
 
-    out = {"counts": dict(Counter(merged["quadrant"])), "n": int(len(merged)),
-           "threshold": thr, "associations": {}}
-    rng = np.random.default_rng(cfg.SEED)
-    for feat in ("has_year", "is_long", "has_multi_entity", "has_number", "family"):
+    counts = dict(Counter(merged["quadrant"]))
+    out = {
+        "counts": counts,
+        "counts_labelled": {quadrant_label(k): v for k, v in counts.items()},
+        "other_cal_rows_both_components": n_both,
+        "other_cal_rows_one_component": n_partial,
+        "taxonomy": QUADRANT_TAXONOMY,
+        "n": int(len(merged)), "threshold": thr,
+        "associations": {}, "associations_per_cell": {}, "replication": {},
+    }
+
+    # ---- how concentrated is the result? (AUDIT finding 6) --------------
+    cell_counts = (merged.groupby(["cell", "quadrant"]).size().unstack(fill_value=0)
+                   if len(merged) else pd.DataFrame())
+    conc = {}
+    for q in ("hopeful", "suppressed"):
+        if len(cell_counts) and q in cell_counts:
+            s = cell_counts[q].sort_values(ascending=False)
+            tot = int(s.sum())
+            conc[q] = {
+                "total": tot, "n_cells_with_any": int((s > 0).sum()),
+                "n_cells_total": int(len(s)),
+                "top3_share": float(s.head(3).sum() / tot) if tot else float("nan"),
+                "by_cell": {k: int(v) for k, v in s.items() if v > 0},
+            }
+    out["concentration"] = conc
+    # A cell whose verbal_cal never crosses the threshold contributes only one
+    # quadrant by construction and is not evidence of anything.
+    degenerate = []
+    for cell, g in merged.groupby("cell"):
+        v = g["verbal_cal"].astype(float)
+        if v.notna().any() and (float(v.max()) < thr or float(v.min()) >= thr):
+            degenerate.append({"cell": cell, "n": int(len(g)),
+                               "verbal_cal_range": [float(v.min()), float(v.max())],
+                               "only_quadrant": sorted(set(g["quadrant"]))})
+    out["threshold_degenerate_cells"] = degenerate
+
+    # ---- continuous Delta, overall and per quadrant ---------------------
+    if "delta_verbal_behavioral" in merged:
+        d = merged["delta_verbal_behavioral"].astype(float)
+        fin = d[np.isfinite(d)]
+        out["delta_verbal_behavioral"] = {
+            "n": int(fin.size),
+            "mean": float(fin.mean()) if fin.size else float("nan"),
+            "sd": float(fin.std(ddof=1)) if fin.size > 1 else float("nan"),
+            "quantiles": {str(q): float(fin.quantile(q)) for q in (0.05, 0.25, 0.5, 0.75, 0.95)}
+                          if fin.size else {},
+            "by_quadrant": {quadrant_label(k): (float(v) if np.isfinite(v) else None)
+                            for k, v in merged.groupby("quadrant")["delta_verbal_behavioral"]
+                            .mean().items()},
+        }
+
+    FEATURES = ("has_year", "is_long", "has_multi_entity", "has_number", "family")
+
+    def chi2_of(frame: pd.DataFrame, feat: str, n_null: int, tag: str) -> "dict | None":
+        """Shuffle-null chi-square, reproducible independently of call order.
+
+        A single shared RNG consumed feature-by-feature and cell-by-cell made
+        `null_p95` depend on how many draws earlier tests had taken and on the
+        row order of the frame — measured range 6.63-8.94 for the same table
+        under the same seed. `beats_null` gates H2's pass rule, so that is a
+        verdict that moves when nothing about the data does. The seed is now
+        derived from the test's own identity, and the frame is sorted before
+        permuting.
+        """
+        frame = frame.sort_values(["model", "tier", "qid"], kind="mergesort")
+        tab = pd.crosstab(frame["quadrant"], frame[feat])
+        if tab.shape[0] < 2 or tab.shape[1] < 2 or tab.values.sum() < 20:
+            return None
+        # correction=False is load-bearing. scipy applies Yates' continuity
+        # correction BY DEFAULT and ONLY on 2x2 tables, while the permutation
+        # null below is uncorrected — so on a 2x2 the observed statistic would
+        # be shrunk and the null would not. Measured shrink: 19.2% at n=60,
+        # 17.4% at n=120, 5.8% at n=300 — worst in exactly the per-cell
+        # replication tests, where cells carry a couple of hundred test rows.
+        # `beats_null` gates H2's pass rule, so the bias runs toward declaring
+        # no association. Both sides are now uncorrected and comparable.
+        chi2, pv, dof, _ = sps.chi2_contingency(tab, correction=False)
+        # A second, CONSERVATIVE p for the replication decision. Dropping Yates
+        # is right for `beats_null` — the permutation null is uncorrected, so
+        # both sides must be — but `replicates_across_cells` keys off an
+        # ANALYTIC p on per-cell 2x2 tables, where the uncorrected version is
+        # anti-conservative: measured 0.1013 (Yates) vs 0.0405 (uncorrected) on
+        # a sparse 2x2, straddling the 0.05 line. Replication is a claim about
+        # generality, so it uses the stricter number.
+        pv_conservative = float(sps.chi2_contingency(tab)[1])
+        seed = (cfg.SEED + int(hashlib.sha256(f"{tag}|{feat}".encode()).hexdigest()[:8], 16)) % (2**32)
+        rng_local = np.random.default_rng(seed)
+
+        # Integer-coded contingency counts via bincount, rather than rebuilding
+        # a DataFrame per draw. Same statistic, ~2 orders of magnitude cheaper,
+        # which is what makes a null large enough to be stable affordable.
+        qcode, _qk = pd.factorize(frame["quadrant"], sort=True)
+        fcode, _fk = pd.factorize(frame[feat], sort=True)
+        R, C = int(qcode.max()) + 1, int(fcode.max()) + 1
+        n_tot = len(qcode)
+        row_tot = np.bincount(qcode, minlength=R).astype(float)
+
+        def chi2_from(fc: np.ndarray) -> float:
+            obs = np.bincount(qcode * C + fc, minlength=R * C).reshape(R, C).astype(float)
+            col_tot = obs.sum(axis=0)
+            exp = np.outer(row_tot, col_tot) / n_tot
+            nz = exp > 0
+            return float((((obs - exp) ** 2)[nz] / exp[nz]).sum())
+
+        nulls = np.empty(n_null, dtype=float)
+        for i in range(n_null):
+            nulls[i] = chi2_from(rng_local.permutation(fcode))
+        p95 = float(np.percentile(nulls, 95)) if n_null else float("nan")
+        # The null's MEAN is the stable diagnostic. On a 2x2 the permutation
+        # p95 sits on a lumpy discrete distribution and moves between adjacent
+        # atoms from draw to draw, while the mean is ~dof under the
+        # uncorrected statistic and materially lower under a corrected one —
+        # so this is what shows, at a glance, that observed and null are on the
+        # same convention.
+        null_mean = float(nulls.mean()) if n_null else float("nan")
+        return {"chi2": float(chi2), "p": float(pv),
+                "p_conservative": pv_conservative,
+                "dof": int(dof), "n": int(tab.values.sum()),
+                "yates_correction": False, "n_null_draws": int(n_null),
+                "null_p95": p95, "null_mean": null_mean,
+                "beats_null": bool(n_null and chi2 > p95),
+                "table": tab.to_dict()}
+
+    for feat in FEATURES:
         if feat not in merged:
             continue
-        tab = pd.crosstab(merged["quadrant"], merged[feat])
-        if tab.shape[0] < 2 or tab.shape[1] < 2 or tab.values.sum() < 20:
-            continue
-        chi2, p, dof, _ = sps.chi2_contingency(tab)
-        nulls = []
-        for _ in range(200):
-            shuffled = rng.permutation(merged[feat].values)
-            t2 = pd.crosstab(merged["quadrant"], shuffled)
-            if t2.shape[0] >= 2 and t2.shape[1] >= 2:
-                nulls.append(sps.chi2_contingency(t2)[0])
-        out["associations"][feat] = {
-            "chi2": float(chi2), "p": float(p), "dof": int(dof),
-            "null_p95": float(np.percentile(nulls, 95)) if nulls else float("nan"),
-            "beats_null": bool(nulls and chi2 > np.percentile(nulls, 95)),
-            "table": tab.to_dict(),
-        }
-    sig = [v for v in out["associations"].values() if v["p"] < 0.05 and v["beats_null"]]
-    out["h2_pass"] = bool(sig)
-    out["verdict"] = ("H2 supported — quadrant membership associates with question features "
-                      "beyond the shuffle null" if sig else
-                      "H2 falsified — no association survives the label-shuffle null")
+        pooled = chi2_of(merged, feat, 2000, tag="pooled")
+        if pooled is not None:
+            out["associations"][feat] = pooled
+        # WITHIN-CELL: the same test run inside each cell, where tier and model
+        # are held constant and a tier proxy can no longer masquerade as a
+        # question characteristic.
+        per_cell = {}
+        for cell, g in merged.groupby("cell"):
+            if len(g) < 40:
+                continue
+            r = chi2_of(g, feat, 1000, tag=f"cell:{cell}")
+            if r is not None:
+                per_cell[cell] = r
+        out["associations_per_cell"][feat] = per_cell
+        out["replication"][feat] = replicates_across_cells(per_cell)
+
+    # ---- pass rule: association AND replication AND the PLAN §16 gates ---
+    pooled_sig = [f for f, v in out["associations"].items() if v["p"] < 0.05 and v["beats_null"]]
+    replicated = [f for f, v in out["replication"].items() if v["replicates"]]
+    out["pooled_significant_features"] = pooled_sig
+    out["replicated_features"] = replicated
+
+    gate3 = gate3 or {}
+    # Per-cell, not grid-wide. `any(...)` let ONE clean cell out of thirteen
+    # satisfy "probe validity" for every other cell in the table, including
+    # cells whose p0 negative control had failed.
+    cells_used = sorted(set(merged["cell"])) if len(merged) else []
+    gate3_failing = [c for c in cells_used if not (gate3.get(c) or {}).get("passes")]
+    gate3_ok = bool(gate3) and bool(cells_used) and not gate3_failing
+    out["gate3_cells_used"] = cells_used
+    out["gate3_cells_failing"] = gate3_failing
+    # PLAN §16 makes H2 conditional on "AND Gate 1 holds". The conjunct was
+    # computed and then omitted from the pass rule, so H2 could be declared
+    # supported while Gate 1 was null in the shipped run (AUDIT finding 8).
+    conjuncts = {
+        "association_beats_null": bool(pooled_sig),
+        "replicates_across_cells": bool(replicated),
+        "gate1_grading_sanity": (None if gate1_pass is None else bool(gate1_pass)),
+        "gate3_probe_validity": gate3_ok,
+    }
+    out["conjuncts"] = conjuncts
+    failing = [k for k, v in conjuncts.items() if not v]
+    out["h2_pass"] = bool(not failing)
+    if out["h2_pass"]:
+        out["verdict"] = ("H2 supported - quadrant membership associates with question features "
+                          "beyond the shuffle null, replicates in >=2 cells, and both grading "
+                          "sanity (Gate 1) and probe validity (Gate 3) hold")
+    else:
+        out["verdict"] = ("H2 not supported - failing conjunct(s): " + ", ".join(failing) +
+                          ". Reported as a DESCRIPTIVE result: confidence disagreement is "
+                          "heterogeneous across model x tier cells, and the features that "
+                          "survive pooling are tier proxies rather than question characteristics.")
+    out["reframing"] = ("Descriptive claim only: cross-signal confidence disagreement varies by "
+                        "model x tier cell. No general claim about question characteristics is "
+                        "made unless `replicated_features` is non-empty.")
+
     examples = {}
     qtext = {r["qid"]: r["question"] for t in bank for r in bank[t]}
-    for q in ("hopeful", "suppressed"):
+    for q in QUADRANT_TAXONOMY:
         sel = merged[merged.quadrant == q].head(25)
         examples[q] = [{"model": r.model, "tier": r.tier, "qid": r.qid,
+                        "quadrant_label": quadrant_label(q),
                         "question": qtext.get(r.qid, ""), "verbal": round(float(r.verbal_cal), 3),
                         "other": round(float(r.other_cal), 3), "correct": int(r.correct)}
                        for r in sel.itertuples()]
     out["examples"] = examples
     merged.to_parquet(PATHS["derived"] / "quadrants.parquet", index=False)
     json_write(PATHS["derived"] / "h2_quadrants.json", out)
-    LOG.log("h2", pass_=out["h2_pass"], **out["counts"])
+    LOG.log("h2", pass_=out["h2_pass"], failing_conjuncts=failing,
+            replicated=replicated, **counts)
     return out
 
 
@@ -2782,7 +4113,8 @@ def omniscience_index(graded: pd.DataFrame) -> pd.DataFrame:
 
 
 def test_h3_base_vs_instruct(signals: pd.DataFrame, abst: dict, cfg: Config) -> dict:
-    """PLAN §13 H3 / Gate 4 — hopeful-confidence delta with missed-knowledge guard."""
+    """PLAN §13 H3 / Gate 4 — unwarranted-stated-confidence delta between the
+    7B base and instruct variants, with the missed-knowledge guard."""
     a, b = "qwen2.5-7b-base", "qwen2.5-7b-instruct"
     test = signals[(signals.split == "test") & signals.model.isin([a, b])].copy()
     if test.model.nunique() < 2:
@@ -2791,36 +4123,127 @@ def test_h3_base_vs_instruct(signals: pd.DataFrame, abst: dict, cfg: Config) -> 
         return r
     thr = cfg.QUADRANT_THRESHOLD
     test["other_cal"] = test[["behavioral_cal", "internal_cal"]].mean(axis=1, skipna=True)
-    test["hopeful"] = ((test.verbal_cal >= thr) & (test.other_cal < thr)).astype(float)
-    shared = set(test[test.model == a].qid) & set(test[test.model == b].qid)
-    test = test[test.qid.isin(shared)]
-    xa = test[test.model == a]["hopeful"].dropna().values
-    xb = test[test.model == b]["hopeful"].dropna().values
+
+    # AUDIT finding 7 / the Figure 3 defect.
+    #
+    #     ((verbal_cal >= thr) & (other_cal < thr)).astype(float)
+    #
+    # NaN >= thr is False, so every row where the base model's verbal signal
+    # failed to parse became a hard 0.0 — indistinguishable from a genuine
+    # "not overconfident". `.dropna()` then had nothing to drop, and
+    # hopeful_rate_base came out at exactly 0.0. The bootstrap CI that
+    # "excluded zero" was measuring missing data, not a behavioural
+    # difference. The indicator is now defined ONLY over rows where both
+    # signals are present; everything else is NaN and is dropped explicitly.
+    valid = np.isfinite(test["verbal_cal"].astype(float)) & np.isfinite(test["other_cal"].astype(float))
+    test["hopeful"] = np.where(valid,
+                               ((test["verbal_cal"] >= thr) & (test["other_cal"] < thr)).astype(float),
+                               np.nan)
+    n_excluded = int((~valid).sum())
+    excluded_by_model = {m: int((~valid & (test["model"] == m)).sum()) for m in (a, b)}
+
+    # Match on questions BOTH variants scored validly, not merely on questions
+    # both variants were asked.
+    ok = test[valid]
+    shared = set(ok[ok.model == a].qid) & set(ok[ok.model == b].qid)
+    matched = ok[ok.qid.isin(shared)]
+    xa = matched[matched.model == a]["hopeful"].dropna().values
+    xb = matched[matched.model == b]["hopeful"].dropna().values
+    if xa.size < 20 or xb.size < 20:
+        r = {"available": False, "n_matched": int(len(shared)),
+             "n_excluded_missing_signal": n_excluded,
+             "excluded_by_model": excluded_by_model,
+             "verdict": (f"H3 untested — only {xa.size}/{xb.size} matched rows have BOTH a verbal "
+                         f"and a behavioral/internal value. The pre-repair code would have "
+                         f"reported a rate of 0.0 here rather than declining to test.")}
+        json_write(PATHS["derived"] / "h3_model_delta.json", r)
+        LOG.log("h3", available=False, n_a=int(xa.size), n_b=int(xb.size))
+        return r
+
     delta = bootstrap_diff_ci(xa, xb, np.mean, cfg.N_BOOTSTRAP, cfg.BOOTSTRAP_CI, cfg.SEED)
     mk = {m: np.mean([v["missed_knowledge_rate"] for k, v in abst.get("per_cell", {}).items()
                       if k.startswith(m)] or [np.nan]) for m in (a, b)}
     mk_rise = float(mk[b] - mk[a]) if all(np.isfinite(list(mk.values()))) else float("nan")
     guard_ok = bool(not np.isfinite(mk_rise) or mk_rise < delta["delta"])
+
+    # An elevated rate is not the same as "confident and wrong". Report the
+    # correctness of the flagged rows and the confident-incorrect rate
+    # separately, so the two are never conflated in the write-up.
+    def rate(frame, col):
+        v = frame[col].astype(float).dropna()
+        return float(v.mean()) if len(v) else float("nan")
+    per_model = {}
+    for m in (a, b):
+        g = matched[matched.model == m]
+        flagged = g[g["hopeful"] == 1.0]
+        per_model[m] = {
+            "n": int(len(g)),
+            "unwarranted_stated_confidence_rate": rate(g, "hopeful"),
+            "flagged_rows_correct_rate": rate(flagged, "correct"),
+            "confident_incorrect_rate": float(((g["verbal_cal"] >= thr) & (g["correct"] == 0)).mean())
+                                         if len(g) else float("nan"),
+            "overall_correct_rate": rate(g, "correct"),
+        }
+
     out = {"available": True, "n_matched": int(len(shared)),
-           "hopeful_rate_base": float(np.mean(xa)) if xa.size else np.nan,
-           "hopeful_rate_instruct": float(np.mean(xb)) if xb.size else np.nan,
+           "n_excluded_missing_signal": n_excluded,
+           "excluded_by_model": excluded_by_model,
+           "metric": "unwarranted stated confidence (Performative Certainty) rate",
+           "unwarranted_rate_base": float(np.mean(xa)),
+           "unwarranted_rate_instruct": float(np.mean(xb)),
+           # legacy keys, deprecated — kept so older artefacts keep loading
+           "hopeful_rate_base": float(np.mean(xa)),
+           "hopeful_rate_instruct": float(np.mean(xb)),
+           "per_model": per_model,
            "delta_base_minus_instruct": delta,
            "missed_knowledge_rate": {k: (None if not np.isfinite(v) else float(v)) for k, v in mk.items()},
            "missed_knowledge_rise": mk_rise, "guard_passes": guard_ok,
            "h3_pass": bool(delta["lo"] > 0 and guard_ok)}
-    out["verdict"] = ("H3 supported — instruction tuning lowers hopeful confidence without blanket hedging"
-                      if out["h3_pass"] else
-                      "H3 falsified / null — delta CI includes 0 or the missed-knowledge guard fired")
+    out["verdict"] = (
+        "H3 descriptive result — in this evaluation setting instruction tuning shifts the rate of "
+        "unwarranted stated confidence and the recoverability of missed knowledge under forced "
+        "answering. Reported as a trade-off, not as evidence that one variant is better calibrated."
+        if out["h3_pass"] else
+        "H3 falsified / null — the base-minus-instruct CI includes 0, or the missed-knowledge "
+        "guard fired.")
     json_write(PATHS["derived"] / "h3_model_delta.json", out)
-    LOG.log("h3", pass_=out["h3_pass"], delta=round(delta["delta"], 4))
+    LOG.log("h3", pass_=out["h3_pass"], delta=round(delta["delta"], 4),
+            excluded=n_excluded)
     return out
 
 
-def test_h4_depth(sweep: pd.DataFrame, cfg: Config) -> dict:
+def gate3_filter_sweep(sweep: pd.DataFrame, gate3: "dict | None", cfg: Config
+                        ) -> tuple[pd.DataFrame, list[str]]:
+    """Drop cells that failed Gate 3 from a probe sweep.
+
+    Gate 3 enforcement reached `internal_cal` but stopped there, so the depth
+    curves — which the audit calls the best finding in the repo — still
+    included cells whose p0 negative control had failed. A depth-of-onset
+    result computed from activations the tap is known to have read wrongly is
+    the original defect wearing a different figure.
+    """
+    if not len(sweep) or not cfg.GATE3_ENFORCE:
+        return sweep, []
+    if not gate3:
+        # Fail CLOSED, matching `internal_scores`. Returning the unfiltered
+        # sweep here meant one dropped keyword argument reverted the whole H4
+        # repair silently — and an empty `gate3_excluded_cells` then reads as
+        # "everything passed" rather than "enforcement never ran".
+        raise RuntimeError(
+            "gate3_filter_sweep: GATE3_ENFORCE is on but no Gate 3 verdict was supplied. "
+            "Pass gate3=gate3_verdict(...), or set GATE3_ENFORCE=False deliberately.")
+    ok = {c for c, v in gate3.items() if v.get("passes")}
+    excluded = sorted(set(sweep["cell"]) - ok)
+    return sweep[sweep["cell"].isin(ok)].copy(), excluded
+
+
+def test_h4_depth(sweep: pd.DataFrame, cfg: Config, gate3: "dict | None" = None) -> dict:
     """PLAN §13 H4 — onset percentile (first percentile reaching AUROC >= gate)
     for retrieval vs reasoning, with a bootstrap CI on the difference."""
+    sweep, excluded = gate3_filter_sweep(sweep, gate3, cfg)
     if not len(sweep):
-        return {"available": False}
+        return {"available": False, "gate3_excluded_cells": excluded,
+                "reason": ("every cell failed Gate 3" if excluded else "no probe sweep")}
     onsets = []
     for (model, tier), g in sweep.groupby(["model", "tier"]):
         g = g.sort_values("layer_pct")
@@ -2852,46 +4275,268 @@ def test_h4_depth(sweep: pd.DataFrame, cfg: Config) -> dict:
     out["verdict"] = ("H4 supported — internal signal onsets later for reasoning than retrieval"
                       if out["h4_pass"] else
                       "H4 falsified / null — onset curves overlap, or reasoning never reaches the gate")
+    out["gate3_excluded_cells"] = excluded
+    out["n_cells"] = int(sweep["cell"].nunique())
+    if excluded:
+        out["coverage_note"] = (
+            f"{len(excluded)} cell(s) excluded for failing Gate 3 — the depth curves are "
+            f"computed over {out['n_cells']} cells, not the full committed grid: {excluded}")
     json_write(PATHS["derived"] / "h4_depth.json", out)
-    LOG.log("h4", pass_=out["h4_pass"], ret=out["mean_onset_retrieval"], rea=out["mean_onset_reasoning"])
+    LOG.log("h4", pass_=out["h4_pass"], ret=out["mean_onset_retrieval"],
+            rea=out["mean_onset_reasoning"], gate3_excluded=len(excluded))
     return out
 
 
-def hierarchical_regression(signals: pd.DataFrame, cfg: Config) -> dict:
-    """PLAN §8·4 — ONE pooled model across the grid, not 30 per-cell fits.
-    Question-level random effects via BinomialBayesMixedGLM; falls back to a
-    logit with cluster-robust SEs when that does not converge."""
-    import statsmodels.api as sm
+def hierarchical_regression(signals: pd.DataFrame, cfg: Config,
+                             bank: "dict | None" = None) -> dict:
+    """PLAN §8·4 — ONE pooled multi-level model across the grid, not 30
+    per-cell fits.
+
+    AUDIT finding 6 / improvement 10: the previous fit carried a random
+    intercept for QUESTION only. With nothing absorbing model capability or
+    tier difficulty, every cell-level baseline was pushed into the fixed
+    effects, so a coefficient on `is_long` could be reading "this tier is
+    hard" rather than "this question is long". Random intercepts now cover
+    model, tier and the model x tier cell as well, and the question-level
+    characteristics enter as fixed effects so their estimates are read WITHIN
+    cell baselines.
+
+    Both cell-level and pooled estimates are reported: `per_cell` gives the
+    unpooled fit for comparison, so the shrinkage the multi-level model
+    applies is visible rather than implicit.
+    """
     import statsmodels.formula.api as smf
 
     d = signals[signals.split == "test"].copy()
+    n_test = len(d)
+    verbal_empty = bool(n_test and d["verbal_cal"].isna().all())
     d = d.dropna(subset=["verbal_cal", "correct"])
+    if verbal_empty:
+        return {"available": False, "n": 0, "n_test_rows": n_test,
+                "reason": "verbal_cal is entirely NaN on the test split — every cell was "
+                          "excluded by the §8·6 degeneracy pre-flight, so there is no verbal "
+                          "axis to regress on (this is not 'insufficient rows')"}
+    # Missingness here is NOT at random. `confidence_behavioral` is NaN exactly
+    # when fewer than ENTROPY_MIN_VALID samples parsed — i.e. on the questions
+    # the model could not answer legibly — and it concentrates in particular
+    # cells. Filling those with the column mean hands the hardest questions an
+    # average-difficulty value, biasing the behavioral coefficient toward zero
+    # and understating its standard error. Mean-imputation is kept so the fit
+    # has complete rows, but each imputed column now carries its own
+    # missingness indicator, so the model can absorb the difference instead of
+    # attributing it to the signal.
+    imputed: dict[str, int] = {}
+    all_missing: list[str] = []
+    near_all_missing: dict[str, float] = {}
     for c in ("behavioral_cal", "internal_cal"):
+        miss = d[c].isna()
+        imputed[c] = int(miss.sum())
+        frac = float(miss.mean()) if len(d) else 0.0
+        if 0.98 <= frac < 1.0:
+            # Not "all missing", so the branch below does not fire — but a
+            # column imputed from one or two surviving rows is a near-constant
+            # standing in for a signal, and its coefficient means nothing.
+            near_all_missing[c] = frac
+        if miss.all():
+            # Wholly absent, not partly missing. `fillna(mean)` is a no-op when
+            # the mean is itself NaN, and the missingness indicator is dropped
+            # precisely here (it has one distinct value), so the all-NaN column
+            # would survive into the formula and patsy would drop EVERY row.
+            # This is reachable, not hypothetical: while the activation-tap
+            # defect persists the p0 control fails grid-wide, every cell is
+            # skipped, and `internal_cal` is 100% NaN.
+            all_missing.append(c)
+            continue
+        if miss.any():
+            d[c + "_missing"] = miss.astype(int)
         d[c] = d[c].fillna(d[c].mean())
     if len(d) < 50:
         return {"available": False, "n": int(len(d)), "reason": "insufficient test rows"}
+
     d["log_params"] = np.log(d["params_b"])
-    d["layer_pct"] = d.get("best_layer_pct", pd.Series(np.nan, index=d.index)).fillna(50.0)
+    # `layer_pct` is the winning probe depth — an internal-probe artefact. When
+    # the internal signal is gone, `best_layer_pct` is gone with it, and
+    # filling 50.0 makes `layer_pct` a constant, so `layer_pct:is_reasoning`
+    # becomes a scalar multiple of `is_reasoning` and the design matrix is
+    # singular. It has to leave alongside the signal it describes.
+    d["layer_pct"] = d.get("best_layer_pct", pd.Series(np.nan, index=d.index))
+    layer_pct_usable = bool(d["layer_pct"].notna().any() and d["layer_pct"].nunique() > 1)
+    d["layer_pct"] = d["layer_pct"].fillna(50.0)
     d["is_reasoning"] = (d["family"] == "reasoning").astype(int)
-    formula = ("correct ~ verbal_cal + behavioral_cal + internal_cal + is_reasoning + log_params"
-               " + is_reasoning:internal_cal + log_params:internal_cal + layer_pct:is_reasoning")
-    out: dict[str, Any] = {"available": True, "n": int(len(d)), "formula": formula}
+    d["cell"] = d["model"].astype(str) + "__" + d["tier"].astype(str)
+    if near_all_missing:
+        LOG.log("hlr_signal_near_empty", signals=near_all_missing,
+                note="imputed from almost no surviving rows — the coefficient is a "
+                     "near-constant, not a measurement")
+    if all_missing:
+        LOG.log("hlr_signal_dropped", signals=all_missing,
+                note="entirely NaN on the test split — dropped from the model rather than "
+                     "left in the formula, where it would silently drop every row")
+
+    # Question characteristics as fixed effects (PLAN §13 H2 features).
+    feat_cols: list[str] = []
+    if bank is not None:
+        want = ["is_long", "has_number", "has_multi_entity", "has_year"]
+        feats = (question_features(bank)[["tier", "qid"] + want]
+                 .drop_duplicates(subset=["tier", "qid"], keep="first"))
+        # Drop any same-named column already on `signals` first. With
+        # suffixes=("", "_f") the incumbent wins and the question feature
+        # arrives as `is_long_f`, which is never added to `fixed_effects` — the
+        # model silently loses the covariate it was built to include.
+        d = d.drop(columns=[c for c in want if c in d.columns])
+        n_before = len(d)
+        d = d.merge(feats, on=["tier", "qid"], how="left", validate="m:1")
+        if len(d) != n_before:
+            raise RuntimeError(
+                f"question_features merge changed the row count {n_before} -> {len(d)}; "
+                f"the question bank has duplicate (tier, qid) keys")
+        for c in want:
+            if c in d:
+                d[c] = d[c].fillna(False).astype(int)
+                if d[c].nunique() > 1:
+                    feat_cols.append(c)
+    # `in_band` is the pilot-accuracy base-rate covariate that replaced cell
+    # deletion (AUDIT finding 9): keep the control, drop the deletion. It is
+    # None for a cell with no pilot record, and a partly-unknown covariate is
+    # left out rather than coerced — `astype(int)` on None does not fail
+    # loudly, it fails usefully-looking.
+    if "in_band" in d and d["in_band"].notna().all() and d["in_band"].nunique() > 1:
+        d["in_band"] = d["in_band"].astype(bool).astype(int)
+        feat_cols.append("in_band")
+    elif "in_band" in d and not d["in_band"].notna().all():
+        out_note = int(d["in_band"].isna().sum())
+        LOG.log("hlr_in_band_dropped", unknown_rows=out_note,
+                note="in_band omitted from the model: some cells have no pilot record")
+
+    miss_cols = [c + "_missing" for c in ("behavioral_cal", "internal_cal")
+                 if c + "_missing" in d and d[c + "_missing"].nunique() > 1]
+    signal_cols = [c for c in ("verbal_cal", "behavioral_cal", "internal_cal")
+                   if c not in all_missing]
+
+    def drop_degenerate(cols: list[str]) -> tuple[list[str], dict]:
+        """Remove constant columns and exact duplicates of an earlier column.
+
+        A constant is collinear with the intercept and an exact duplicate is
+        collinear with its twin; either makes the design matrix singular and
+        the whole fit returns `method: "failed"`. Two of the question features
+        coincide whenever a tier's only numeric content IS a year, which is
+        common in the retrieval tiers — so this is a real configuration, not a
+        pathological one.
+        """
+        kept, dropped = [], {}
+        for c in cols:
+            col = d[c]
+            if col.nunique(dropna=False) <= 1:
+                dropped[c] = "constant"
+                continue
+            twin = next((k for k in kept if d[k].equals(col)), None)
+            if twin is not None:
+                dropped[c] = f"identical to {twin}"
+                continue
+            kept.append(c)
+        return kept, dropped
+
+    covariates, dropped_degenerate = drop_degenerate(
+        ["is_reasoning", "log_params"] + feat_cols + miss_cols)
+    if dropped_degenerate:
+        LOG.log("hlr_degenerate_terms", dropped=dropped_degenerate,
+                note="collinear with the intercept or with another term; the fit would be "
+                     "singular with them in")
+    fixed = signal_cols + covariates
+    def _usable(term: str) -> bool:
+        for part in term.split(":"):
+            if part in ("internal_cal",) and part not in signal_cols:
+                return False
+            if part == "layer_pct" and not layer_pct_usable:
+                return False
+            if part in ("is_reasoning", "log_params") and part not in covariates:
+                return False
+        return True
+    interactions = [t for t in ("is_reasoning:internal_cal", "log_params:internal_cal",
+                                "layer_pct:is_reasoning") if _usable(t)]
+    formula = "correct ~ " + " + ".join(fixed + interactions)
+    out: dict[str, Any] = {"available": True, "n": int(len(d)), "formula": formula,
+                           "fixed_effects": fixed,
+                           "imputed_counts": imputed,
+                           "missingness_indicators": miss_cols,
+                           "signals_dropped_all_missing": all_missing,
+                           "signals_near_all_missing": near_all_missing,
+                           "terms_dropped_degenerate": dropped_degenerate,
+                           # What was ATTEMPTED. `random_intercepts_fitted` —
+                           # written only on a converged VB fit — is what was
+                           # actually estimated. Reporting the wish list
+                           # unconditionally meant a cluster-robust fallback,
+                           # which has no random effects at all, still claimed
+                           # four of them.
+                           "random_intercepts_requested": ["question", "model", "tier",
+                                                           "model_x_tier"],
+                           "random_intercepts_fitted": [],
+                           "n_questions": int(d["qid"].nunique()),
+                           "n_cells": int(d["cell"].nunique())}
+
+    # ---- unpooled per-cell fits, for the shrinkage comparison -----------
+    per_cell: dict[str, dict] = {}
+    # The same surviving signals as the pooled fit. Hardcoding all three meant
+    # every per-cell fit died with the identical zero-size / singular error the
+    # pooled path was repaired for.
+    cell_formula = "correct ~ " + " + ".join(
+        signal_cols + [c for c in feat_cols if c in covariates])
+    for cell, g in d.groupby("cell"):
+        if len(g) < 40 or g["correct"].nunique() < 2:
+            continue
+        try:
+            m = smf.logit(cell_formula, data=g).fit(disp=0)
+            per_cell[cell] = {"n": int(len(g)),
+                              "params": {k: float(v) for k, v in m.params.items()},
+                              "pvalues": {k: float(v) for k, v in m.pvalues.items()}}
+        except Exception as exc:                          # noqa: BLE001
+            per_cell[cell] = {"n": int(len(g)), "error": str(exc)[:120]}
+    out["per_cell"] = per_cell
+
+    # ---- pooled multi-level fit ----------------------------------------
     method = cfg.HLR_METHOD
     if method in ("auto", "bayes_mixed"):
-        try:
-            from statsmodels.genmod.bayes_mixed_glm import BinomialBayesMixedGLM
-            m = BinomialBayesMixedGLM.from_formula(formula, {"question": "0 + C(qid)"}, d)
-            r = m.fit_vb(verbose=False)
-            out.update(method="bayes_mixed_glm",
-                       params=dict(zip(r.model.exog_names, [float(x) for x in r.fe_mean])),
-                       sd=dict(zip(r.model.exog_names, [float(x) for x in r.fe_sd])))
-            json_write(PATHS["derived"] / "hierarchical_regression.json", out)
-            return out
-        except Exception as exc:                          # noqa: BLE001
-            out["bayes_error"] = str(exc)[:200]
+        # Random intercepts at every level the design nests: question, model,
+        # tier, and the model x tier cell. `vcp` groups are variance
+        # components, all fitted simultaneously in one model.
+        vc = {"question": "0 + C(qid)", "model": "0 + C(model)",
+              "tier": "0 + C(tier)", "model_x_tier": "0 + C(cell)"}
+        for drop in ([], ["model_x_tier"], ["model_x_tier", "tier"], ["model_x_tier", "tier", "model"]):
+            use = {k: v for k, v in vc.items() if k not in drop}
+            try:
+                from statsmodels.genmod.bayes_mixed_glm import BinomialBayesMixedGLM
+                m = BinomialBayesMixedGLM.from_formula(formula, use, d)
+                # Non-convergence is a WARNING, not an exception. Without this
+                # the ladder never degraded: the first rung "succeeded" every
+                # time and the report said four random intercepts were fitted
+                # when the optimiser had given up.
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    r = m.fit_vb(verbose=False)
+                notes = [str(w.message) for w in caught]
+                if any("converge" in n.lower() for n in notes):
+                    raise RuntimeError("VB fit did not converge: " + notes[0][:120])
+                out.update(method="bayes_mixed_glm",
+                           converged=True, fit_warnings=notes[:5],
+                           random_intercepts_fitted=sorted(use),
+                           random_intercepts_dropped=sorted(drop),
+                           params=dict(zip(r.model.exog_names, [float(x) for x in r.fe_mean])),
+                           sd=dict(zip(r.model.exog_names, [float(x) for x in r.fe_sd])),
+                           vc_sd=dict(zip(getattr(r.model, "vcp_names", []),
+                                          [float(x) for x in getattr(r, "vcp_mean", [])])))
+                json_write(PATHS["derived"] / "hierarchical_regression.json", out)
+                LOG.log("hlr", method=out["method"], n=out["n"],
+                        random=out["random_intercepts_fitted"])
+                return out
+            except Exception as exc:                      # noqa: BLE001
+                out.setdefault("bayes_errors", {})["+".join(sorted(use))] = str(exc)[:200]
+
+    # ---- fallback: cluster-robust logit, clustered on the CELL ----------
     try:
-        m = smf.logit(formula, data=d).fit(disp=0, cov_type="cluster", cov_kwds={"groups": d["qid"]})
-        out.update(method="logit_cluster_robust",
+        m = smf.logit(formula, data=d).fit(disp=0, cov_type="cluster",
+                                           cov_kwds={"groups": d["cell"]})
+        out.update(method="logit_cluster_robust_cell",
+                   cluster_unit="model x tier cell",
                    params={k: float(v) for k, v in m.params.items()},
                    pvalues={k: float(v) for k, v in m.pvalues.items()},
                    conf_int={k: [float(a), float(b)] for k, (a, b) in m.conf_int().iterrows()},
@@ -2900,6 +4545,159 @@ def hierarchical_regression(signals: pd.DataFrame, cfg: Config) -> dict:
         out.update(method="failed", error=str(exc)[:300])
     json_write(PATHS["derived"] / "hierarchical_regression.json", out)
     LOG.log("hlr", method=out.get("method"), n=out["n"])
+    return out
+
+
+def popularity_contrast(signals: pd.DataFrame, graded: pd.DataFrame, cfg: Config) -> dict:
+    """R1 (top popularity quintile) vs R2 (bottom) vs R3 (adversarial).
+
+    The popularity manipulation is the design's most distinctive feature and it
+    was never analysed: the 25-80% band deleted every R2 and R3 cell, leaving
+    the retrieval arm of H4 as a single tier — the easiest one (AUDIT findings
+    5 and 9). With the band demoted to a covariate these cells run, so the
+    gradient can finally be read.
+
+    Per model, per tier: accuracy, the three calibrated signals, and the
+    continuous verbal-minus-behavioral discrepancy. The contrast of interest is
+    whether stated confidence tracks the popularity drop as closely as accuracy
+    does — if verbal confidence stays flat while accuracy falls, that is
+    unwarranted stated confidence measured against a manipulation rather than
+    against a threshold.
+    """
+    POP = {"R1": "top_quintile", "R2": "bottom_quintile", "R3": "adversarial"}
+    out: dict[str, Any] = {"tiers": POP, "available": False, "per_model": {}, "contrasts": {}}
+    test = signals[(signals.split == "test") & signals.tier.isin(POP)]
+    if not len(test):
+        out["reason"] = "no retrieval-tier test rows — R1/R2/R3 produced no committed data"
+        json_write(PATHS["derived"] / "popularity_gradient.json", out)
+        return out
+
+    def cell_stats(g: pd.DataFrame) -> dict:
+        d = {"n": int(len(g)), "accuracy": float(g["correct"].mean())}
+        for sig in SIGNALS:
+            v = g[f"{sig}_cal"].astype(float).dropna()
+            d[f"{sig}_cal_mean"] = float(v.mean()) if len(v) else None
+        dd = g.get("delta_verbal_behavioral")
+        dd = dd.astype(float).dropna() if dd is not None else pd.Series(dtype=float)
+        d["delta_verbal_behavioral_mean"] = float(dd.mean()) if len(dd) else None
+        return d
+
+    for model, gm in test.groupby("model"):
+        per_tier = {t: cell_stats(g) for t, g in gm.groupby("tier")}
+        out["per_model"][model] = per_tier
+        # R1 -> R2 is the clean popularity manipulation: same dataset, same
+        # answer form, only the popularity quintile differs.
+        if "R1" in per_tier and "R2" in per_tier:
+            a, b = per_tier["R1"], per_tier["R2"]
+            drop_acc = a["accuracy"] - b["accuracy"]
+            dv = ((a.get("verbal_cal_mean") or np.nan) - (b.get("verbal_cal_mean") or np.nan))
+            xa = gm[gm.tier == "R1"]["correct"].values.astype(float)
+            xb = gm[gm.tier == "R2"]["correct"].values.astype(float)
+            out["contrasts"][model] = {
+                "accuracy_drop_R1_minus_R2": float(drop_acc),
+                "verbal_cal_drop_R1_minus_R2": (None if not np.isfinite(dv) else float(dv)),
+                "confidence_tracks_accuracy": (None if not np.isfinite(dv)
+                                               else bool(dv >= 0.5 * drop_acc)),
+                "accuracy_drop_ci": bootstrap_diff_ci(xa, xb, np.mean, cfg.N_BOOTSTRAP,
+                                                      cfg.BOOTSTRAP_CI, cfg.SEED)
+                                    if xa.size and xb.size else None,
+            }
+    out["available"] = bool(out["contrasts"])
+    out["interpretation"] = (
+        "confidence_tracks_accuracy=False means calibrated verbalized confidence fell by less "
+        "than half as much as accuracy did when popularity dropped — stated confidence is not "
+        "tracking the difficulty manipulation.")
+    covered = sorted(set(test["tier"]))
+    out["tiers_covered"] = covered
+    if len(covered) < 3:
+        out["coverage_warning"] = (f"only {covered} present; the popularity gradient needs R1 and "
+                                   f"R2, and the adversarial contrast needs R3")
+    json_write(PATHS["derived"] / "popularity_gradient.json", out)
+    LOG.log("popularity_contrast", models=len(out["per_model"]), tiers=covered)
+    return out
+
+
+def difficulty_matched_view(signals: pd.DataFrame, cfg: Config, n_bins: int = 4) -> dict:
+    """Within-cell, difficulty-matched signal comparison.
+
+    The replacement for cell deletion (AUDIT finding 9, improvement 6). Items
+    are binned by difficulty ESTIMATED ACROSS MODELS within a tier — the share
+    of models that answered that question correctly — so the bin is a property
+    of the question, not of the model being scored. Comparing signals inside a
+    bin holds item difficulty fixed without discarding a single cell.
+    """
+    out: dict[str, Any] = {"available": False, "n_bins": n_bins, "per_tier": {}}
+    test = signals[signals.split == "test"].copy()
+    if not len(test):
+        json_write(PATHS["derived"] / "difficulty_matched.json", out)
+        return out
+
+    # Cross-model difficulty of each question, within its tier.
+    diff = (test.groupby(["tier", "qid"])["correct"].mean()
+            .rename("item_difficulty").reset_index())
+    diff["n_models"] = (test.groupby(["tier", "qid"])["model"].nunique().values)
+    test = test.merge(diff, on=["tier", "qid"], how="left")
+
+    degenerate: dict[str, dict] = {}
+    for tier, gt in test.groupby("tier"):
+        d = gt["item_difficulty"].astype(float)
+        if d.nunique() < 2:
+            # Every question in the tier has the same cross-model correctness
+            # rate — usually because the tier is near 0% or near 100% for all
+            # models. There is no within-tier difficulty variation to match on.
+            degenerate[tier] = {"reason": "no cross-model difficulty variation",
+                                "n_rows": int(len(gt)), "value": float(d.iloc[0]) if len(d) else None}
+            continue
+        try:
+            gt = gt.assign(diff_bin=pd.qcut(d, q=min(n_bins, d.nunique()),
+                                            labels=False, duplicates="drop"))
+        except ValueError:
+            continue
+        per_bin = {}
+        for b, gb in gt.groupby("diff_bin"):
+            if len(gb) < 30:
+                continue
+            entry = {"n": int(len(gb)), "mean_item_difficulty": float(gb["item_difficulty"].mean()),
+                     "base_rate": float(gb["correct"].mean()), "signals": {}}
+            for sig in SIGNALS:
+                v = gb[f"{sig}_cal"].astype(float)
+                y = gb["correct"].astype(float)
+                m = np.isfinite(v) & np.isfinite(y)
+                if m.sum() < 20 or y[m].nunique() < 2:
+                    continue
+                entry["signals"][sig] = {
+                    "n": int(m.sum()),
+                    "auroc": safe_auroc(y[m].values.astype(int), v[m].values),
+                    "ece": ece(v[m].values, y[m].values, cfg.ECE_BINS),
+                    "brier": brier(v[m].values, y[m].values),
+                    # Resolution is the term that survives base-rate matching:
+                    # inside a bin the base rate is fixed, so this is signal,
+                    # not difficulty.
+                    "resolution": murphy_decomposition(v[m].values, y[m].values,
+                                                       cfg.MURPHY_BINS).get("resolution"),
+                }
+            per_bin[str(int(b))] = entry
+        if per_bin:
+            out["per_tier"][tier] = {"bins": per_bin,
+                                     "n_models": int(gt["model"].nunique()),
+                                     "n_questions": int(gt["qid"].nunique())}
+    out["available"] = bool(out["per_tier"])
+    out["degenerate_tiers"] = degenerate
+    out["note"] = ("Difficulty is the cross-model correctness rate of the question within its "
+                   "tier, so bins are a property of the item. Comparing signals within a bin "
+                   "controls the base rate WITHOUT deleting any cell.")
+    if degenerate:
+        out["limitation"] = (
+            "Matching needs within-tier difficulty variation, and a tier where every model "
+            "scores near 0% (or near 100%) has none — which is exactly the regime the 25-80% "
+            "band used to delete. For those tiers this control is unavailable, and the "
+            "base-rate adjustment rests entirely on the GLMM's model x tier random intercept. "
+            "Say so rather than reporting a matched comparison that did not happen: "
+            f"{sorted(degenerate)}.")
+        LOG.log("difficulty_matched_degenerate", tiers=sorted(degenerate),
+                note="no within-tier difficulty variation; matching unavailable for these")
+    json_write(PATHS["derived"] / "difficulty_matched.json", out)
+    LOG.log("difficulty_matched", tiers=len(out["per_tier"]))
     return out
 
 
@@ -3043,7 +4841,7 @@ def judge_targets(graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) -> pd.Data
 
 @torch.no_grad()
 def stage_judge(bank: dict, graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) -> dict:
-    """Runs after everything else. Idempotent and resumable like every stage."""
+    """Runs before the hypothesis tests (PLAN §16 conditions H2 on Gate 1). Idempotent and resumable like every stage."""
     if not jc.ENABLED:
         return {"enabled": False}
     targets = judge_targets(graded, jc, cfg)
@@ -3117,7 +4915,15 @@ def stage_judge(bank: dict, graded: pd.DataFrame, jc: JudgeConfig, cfg: Config) 
 def export_manual_check_sheet(bank: dict, graded: pd.DataFrame, cfg: Config) -> Path:
     """Gate 1 needs HUMAN verification of 50–100 items per grader family
     (PLAN §3, §16). This writes the sheet to hand-label; the judge above is an
-    additional automated opinion, not a replacement for it."""
+    additional automated opinion, not a replacement for it.
+
+    A filled sheet is NEVER overwritten. Re-running the pipeline used to drop a
+    fresh blank template on top of the human labels, which is the most likely
+    reason `manual_correct` reads 0/200 in two of the three result trees while
+    `POINTS(Debojeet).md` records Gate 1 as completed at 97.5% (AUDIT finding
+    8). A new template is written beside the labelled sheet instead, so extra
+    rows can still be graded without destroying the existing ones.
+    """
     qtext = {r["qid"]: r["question"] for t in bank for r in bank[t]}
     rng = np.random.default_rng(cfg.SEED)
     rows = []
@@ -3130,9 +4936,96 @@ def export_manual_check_sheet(bank: dict, graded: pd.DataFrame, cfg: Config) -> 
                              manual_correct="", disagreement_note=""))
     df = pd.DataFrame(rows)
     p = PATHS["tables"] / "gate1_manual_check_sheet.csv"
+    if p.exists():
+        try:
+            existing = pd.read_csv(p)
+            n_filled = int(existing["manual_correct"].notna().sum()) if "manual_correct" in existing else 0
+        except Exception:                                # noqa: BLE001
+            existing, n_filled = None, 0
+        if n_filled > 0:
+            alt = PATHS["tables"] / "gate1_manual_check_sheet.NEW_TEMPLATE.csv"
+            df.to_csv(alt, index=False)
+            LOG.log("manual_sheet_preserved", path=str(p), filled_rows=n_filled,
+                    template_written=str(alt),
+                    note="human labels found — refusing to overwrite")
+            return p
     df.to_csv(p, index=False)
     LOG.log("manual_sheet", path=str(p), rows=len(df))
     return p
+
+
+def ingest_manual_sheet(path: Path, cfg: Config) -> dict:
+    """Read a hand-labelled Gate 1 sheet back into the report.
+
+    Accepts the usual spellings a human types into a spreadsheet. Rows left
+    blank are UNGRADED and are excluded from the denominator — they are not
+    counted as disagreements, and they are not counted as agreements either.
+    """
+    out = {"available": False, "path": str(path), "n_rows": 0, "n_labelled": 0,
+           "agreement": None, "n_disagreements": 0, "disagreement_notes": [],
+           "by_grader": {}}
+    if not Path(path).exists():
+        return out
+    try:
+        df = pd.read_csv(path)
+    except Exception as exc:                             # noqa: BLE001
+        out["error"] = str(exc)[:200]
+        return out
+    out["n_rows"] = int(len(df))
+    if "manual_correct" not in df or "automated_correct" not in df:
+        out["error"] = "sheet is missing manual_correct / automated_correct"
+        return out
+
+    TRUE = {"1", "1.0", "true", "t", "yes", "y", "correct"}
+    FALSE = {"0", "0.0", "false", "f", "no", "n", "incorrect", "wrong"}
+
+    def to_bool(v):
+        s = str(v).strip().lower()
+        if s in TRUE:
+            return True
+        if s in FALSE:
+            return False
+        return None
+
+    df["_manual"] = df["manual_correct"].map(to_bool)
+    df["_auto"] = df["automated_correct"].map(to_bool)
+    lab = df[df["_manual"].notna() & df["_auto"].notna()]
+    out["n_labelled"] = int(len(lab))
+    if not len(lab):
+        LOG.log("manual_sheet_ingest", labelled=0, note="sheet present but unlabelled")
+        return out
+    agree = (lab["_manual"] == lab["_auto"])
+    out.update(available=True, agreement=float(agree.mean()),
+               n_disagreements=int((~agree).sum()),
+               passes=bool(agree.mean() >= cfg.GATE1_AGREEMENT),
+               threshold=cfg.GATE1_AGREEMENT)
+    if "grader" in lab:
+        out["by_grader"] = {str(k): {"n": int(len(g)), "agreement": float((g["_manual"] == g["_auto"]).mean())}
+                            for k, g in lab.groupby("grader")}
+    if "disagreement_note" in lab:
+        out["disagreement_notes"] = [str(x) for x in lab.loc[~agree, "disagreement_note"].dropna()
+                                     if str(x).strip()][:20]
+    LOG.log("manual_sheet_ingest", labelled=out["n_labelled"], agreement=round(out["agreement"], 4),
+            passes=out["passes"])
+    return out
+
+
+def combined_gate1(judge: dict, manual: dict, cfg: Config) -> "bool | None":
+    """Gate 1 verdict from the human sheet and the automated judge.
+
+    The human sheet is authoritative when it exists — PLAN §16 asks for human
+    verification and the judge is explicitly "an additional automated opinion,
+    not a replacement for it". When neither source has data the verdict is
+    None, which is NOT the same as False and is NOT the same as True: H2's
+    conjunct treats an unfilled Gate 1 as a failing conjunct rather than
+    quietly assuming it held.
+    """
+    if manual.get("available"):
+        return bool(manual["passes"])
+    jp = judge.get("gate1_pass")
+    return None if jp is None else bool(jp)
+
+
 # %%
 # ============================================================================
 # CELL 19 — figures (PLAN §15, Figures 1–4 + supplementary)
@@ -3155,6 +5048,7 @@ CMAP_DIV = LinearSegmentedColormap.from_list("div_br", DIVERGING)
 # Fixed slot per tier so a filtered chart never repaints the survivors.
 TIER_COLOR = {t: PALETTE[i] for i, t in enumerate(TIER_SPECS)}
 SIGNAL_COLOR = {"verbal": PALETTE[0], "behavioral": PALETTE[1], "internal": PALETTE[2]}
+# Keyed by the legacy storage names; rendered via `quadrant_label()`.
 QUADRANT_COLOR = {"hopeful": PALETTE[0], "suppressed": PALETTE[1],
                   "agree_high": "#c9c8c2", "agree_low": "#e6e5e1"}
 
@@ -3280,7 +5174,7 @@ def fig2_quadrant(cfg: Config, abst: dict) -> None:
             continue
         ax.scatter(s["verbal_cal"], s["other_cal"], s=13, color=QUADRANT_COLOR[name],
                    edgecolors=SURFACE, linewidths=0.5, alpha=0.85, zorder=3 if "agree" not in name else 2,
-                   label=f"{name} (n={len(s)})")
+                   label=f"{quadrant_label(name)} (n={len(s)})")
     ax.set(xlabel="calibrated verbalized confidence", ylabel="calibrated behavioral / internal",
            xlim=(-0.02, 1.02), ylim=(-0.02, 1.02), title="Signal mismatch quadrants (test split)")
     ax.legend(loc="lower right", markerscale=1.4)
@@ -3298,22 +5192,33 @@ def fig2_quadrant(cfg: Config, abst: dict) -> None:
     ax2.grid(axis="y", visible=False)
     fig.tight_layout()
     save_fig(fig, "fig2_quadrant", cfg,
-             "Figure 2 — quadrant plot of calibrated verbal vs behavioral/internal with the "
-             "abstention split. Predicted under H2: hopeful and suppressed quadrants cluster by "
-             "question type. Null: uniform scatter, no clustering.")
+             "Figure 2 — epistemic-alignment quadrants: calibrated verbalized confidence vs "
+             "calibrated behavioral/internal confidence, with the abstention split. "
+             "Performative Certainty = stated confidence exceeds sample stability; Excessive "
+             "Hedging = the reverse; Grounded Certainty and Honest Doubt are the congruent "
+             "states. Predicted under H2: the two mismatch quadrants cluster by question type "
+             "WITHIN cells. Null: uniform scatter. Note the axis threshold is a fixed 0.5 cut — "
+             "see h2_quadrants.json `concentration` and `threshold_degenerate_cells` for how "
+             "many cells sit entirely on one side of it.")
 
 
 def fig3_model_delta(h3: dict, cfg: Config) -> None:
-    """Figure 3 — base vs Instruct: hopeful rate and missed-knowledge rate."""
+    """Figure 3 — base vs Instruct: unwarranted-stated-confidence rate and
+    missed-knowledge rate.
+
+    Drawn only when H3 is `available`. Before the repair, a base-model rate of
+    0.0 produced entirely by NaN coercion was plotted here as a real bar
+    (AUDIT finding 7); H3 now declines to report rather than plot missing data.
+    """
     apply_style(cfg)
     if not h3.get("available"):
         return
     apply_style(cfg)
     fig, ax = plt.subplots(figsize=(cfg.FIG_WIDTH * 0.62, cfg.FIG_WIDTH * 0.42))
-    groups = ["hopeful confidence", "missed knowledge"]
-    base = [h3.get("hopeful_rate_base", np.nan),
+    groups = ["unwarranted stated\nconfidence", "missed knowledge"]
+    base = [h3.get("unwarranted_rate_base", h3.get("hopeful_rate_base", np.nan)),
             (h3.get("missed_knowledge_rate", {}) or {}).get("qwen2.5-7b-base", np.nan)]
-    inst = [h3.get("hopeful_rate_instruct", np.nan),
+    inst = [h3.get("unwarranted_rate_instruct", h3.get("hopeful_rate_instruct", np.nan)),
             (h3.get("missed_knowledge_rate", {}) or {}).get("qwen2.5-7b-instruct", np.nan)]
     x = np.arange(len(groups))
     w = 0.34
@@ -3334,9 +5239,11 @@ def fig3_model_delta(h3: dict, cfg: Config) -> None:
     ax.legend(loc="upper right")
     fig.tight_layout()
     save_fig(fig, "fig3_model_delta", cfg,
-             "Figure 3 — hopeful-confidence and missed-knowledge rates, Qwen2.5-7B base vs "
-             "Instruct. Predicted under H3: hopeful rate drops without a matched rise in missed "
-             "knowledge. Null: overlapping bars / equal rates.")
+             "Figure 3 — rate of unwarranted stated confidence (Performative Certainty) and "
+             "missed-knowledge rate, Qwen2.5-7B base vs Instruct, over questions where BOTH a "
+             "verbalized and a behavioral/internal value exist. Descriptive trade-off: "
+             "instruction tuning shifts asserted-confidence disagreement and forced-answer "
+             "recoverability together. Null: overlapping bars.")
 
 
 def fig4_depth_curves(sweep: pd.DataFrame, cfg: Config) -> None:
@@ -3586,22 +5493,39 @@ def compute_ledger(cfg: Config) -> pd.DataFrame:
 
 
 def stage_report(bank: dict, commitments: dict, h0: dict, h1: dict, h2: dict, h3: dict,
-                 h4: dict, gate3: dict, judge: dict, sanity: dict, hlr: dict, cfg: Config) -> dict:
+                 h4: dict, gate3: dict, judge: dict, sanity: dict, hlr: dict, cfg: Config,
+                 popularity: "dict | None" = None, matched: "dict | None" = None) -> dict:
     ledger = compute_ledger(cfg)
     total_h = float(ledger["gpu_hours"].sum()) if len(ledger) else 0.0
     committed = [k for k, v in commitments.items() if v["committed"]]
     gates = {
         "gate1_grading_sanity": {
+            # Human sheet is authoritative; the judge is a second opinion.
+            # `pass: null` means UNVERIFIED, not passed.
             "pass": judge.get("gate1_pass"),
+            "source": ("human_manual_sheet" if (judge.get("manual") or {}).get("available")
+                       else "automated_judge" if judge.get("agreement_overall") is not None
+                       else "none"),
             "automated_agreement": judge.get("agreement_overall"),
-            "note": "Requires the manual check sheet to be filled in to close fully (PLAN §16).",
+            "manual_agreement": (judge.get("manual") or {}).get("agreement"),
+            "manual_rows_labelled": (judge.get("manual") or {}).get("n_labelled", 0),
+            "manual_rows_total": (judge.get("manual") or {}).get("n_rows", 0),
+            "manual_disagreements": (judge.get("manual") or {}).get("n_disagreements", 0),
+            "manual_by_grader": (judge.get("manual") or {}).get("by_grader", {}),
+            "threshold": cfg.GATE1_AGREEMENT,
+            "note": ("Gate 1 closes on the HUMAN check sheet (PLAN §16). A null verdict means "
+                     "the sheet is unfilled — it must not be reported as passed."),
         },
         "gate2_format_agreement": {"pass": h0.get("gate2_pass"),
                                    "min_lower_ci": min([v["lo"] for v in h0.get("pairs", {}).values()
                                                         if np.isfinite(v.get("lo", np.nan))] or [np.nan])},
-        "gate3_probe_validity": {"cells": len(gate3), "passed": sum(v["passes"] for v in gate3.values()),
-                                 "dirty_activation_cells": sum(1 for v in gate3.values()
-                                                               if not v["activations_clean"])},
+        "gate3_probe_validity": {
+            "cells": len(gate3), "passed": sum(v["passes"] for v in gate3.values()),
+            "dirty_activation_cells": sum(1 for v in gate3.values() if not v["activations_clean"]),
+            "p0_negative_control_failures": sum(1 for v in gate3.values()
+                                                if not v.get("p0_neg_control_pass")),
+            "enforced": cfg.GATE3_ENFORCE,
+        },
         "gate4_model_comparison": {"pass": h3.get("h3_pass"), "available": h3.get("available")},
     }
     report = {
@@ -3614,8 +5538,52 @@ def stage_report(bank: dict, commitments: dict, h0: dict, h1: dict, h2: dict, h3
         "gates": gates,
         "hypotheses": {"H0": h0.get("verdict"), "H1": h1.get("verdict"), "H2": h2.get("verdict"),
                        "H3": h3.get("verdict"), "H4": h4.get("verdict")},
+        # Qualifiers that change how a verdict should be read. Gate 3 removes a
+        # failing cell's internal signal, which shrinks the grid H1 compares
+        # over and the grid H4's depth curves are drawn from; a bare verdict
+        # string does not show that.
+        "hypothesis_qualifiers": {
+            "H1_like_for_like": (h1.get("coverage") or {}).get("like_for_like"),
+            "H1_coverage_warning": (h1.get("coverage") or {}).get("warning"),
+            "H1_cells_all_three_signals": (h1.get("coverage") or {}).get("cells_all_three_signals", []),
+            "H2_failing_conjuncts": [k for k, v in (h2.get("conjuncts") or {}).items() if not v],
+            "H2_gate3_cells_failing": h2.get("gate3_cells_failing", []),
+            "H3_excluded_missing_signal": h3.get("n_excluded_missing_signal"),
+            "H4_gate3_excluded_cells": h4.get("gate3_excluded_cells", []),
+            "H4_coverage_note": h4.get("coverage_note"),
+            "internal_cells_skipped": sorted(
+                (json_read(PATHS["derived"] / "internal_gate3_skipped.json", {}) or {})),
+        },
+        "canonical_format": (json_read(PATHS["derived"] / "calibration_meta.json", {}) or {})
+                            .get("canonical_format"),
         "entropy_sanity": sanity,
-        "hierarchical_regression": {k: hlr.get(k) for k in ("method", "n", "pseudo_r2")},
+        "hierarchical_regression": {k: hlr.get(k) for k in
+                                    ("method", "n", "pseudo_r2", "converged",
+                                     "random_intercepts_requested", "random_intercepts_fitted",
+                                     # without these, a failed fit reads as a
+                                     # successful one with a null pseudo-R2
+                                     "error", "reason", "available",
+                                     "signals_dropped_all_missing",
+                                     "signals_near_all_missing")},
+        # The base-rate control that replaced cell deletion, and the popularity
+        # manipulation the deletion had erased (AUDIT findings 5 and 9). These
+        # wrote their own JSON but appeared in no report, so a reader of
+        # final_report.json could not tell they had run.
+        "base_rate_control": {
+            "band_mode": ("covariate" if cfg.COMMIT_CELLS_OUTSIDE_BAND else "deletion"),
+            "accuracy_band": list(cfg.ACCURACY_BAND),
+            "cells_out_of_band": sum(1 for v in commitments.values() if not v.get("in_band")),
+            "difficulty_matched": {"available": (matched or {}).get("available", False),
+                                   "tiers": sorted((matched or {}).get("per_tier", {})),
+                                   "artifact": "derived/difficulty_matched.json"},
+        },
+        "popularity_gradient": {
+            "available": (popularity or {}).get("available", False),
+            "tiers_covered": (popularity or {}).get("tiers_covered", []),
+            "coverage_warning": (popularity or {}).get("coverage_warning"),
+            "contrasts": (popularity or {}).get("contrasts", {}),
+            "artifact": "derived/popularity_gradient.json",
+        },
         "compute": {"measured_gpu_hours": round(total_h, 3),
                     "by_model": (ledger.groupby("model")["gpu_hours"].sum().round(3).to_dict()
                                  if len(ledger) else {})},
@@ -3627,13 +5595,35 @@ def stage_report(bank: dict, commitments: dict, h0: dict, h1: dict, h2: dict, h3
     }
     json_write(PATHS["meta"] / "final_report.json", report)
 
-    # §17.2 run-log row, ready to paste into PLAN.md
-    lines = ["| Run-log ID | What it did | Outcome | Headline |", "|---|---|---|---|"]
+    # §17.2 run-log rows, ready to paste into PLAN.md.
+    # PLAN §0 still says "no runs yet" and §17.2 is empty after three runs
+    # (AUDIT finding 8). Provenance is emitted here in paste-ready form so
+    # closing that gap is a copy, not a reconstruction from memory.
+    unbound = str(PROV.get("code_sha", "")).startswith("UNBOUND")
+    lines = [
+        f"### Run `{cfg.RUN_NAME}` — {report['finished_utc']}",
+        "",
+        f"- code_sha    : `{PROV.get('code_sha')}`"
+        + ("  **UNBOUND — this run is not traceable to a commit**" if unbound else ""),
+        f"- config_hash : `{PROV.get('config_hash')}`",
+        f"- seed        : {PROV.get('seed')}",
+        f"- platform    : {PROV.get('platform')}  ·  dtype {PROV.get('dtype')}",
+        f"- torch {PROV.get('torch')} · transformers {PROV.get('transformers')} "
+        f"· math_verify {PROV.get('math_verify')}",
+        f"- grid        : {len(committed)}/{len(commitments)} cells committed",
+        f"- GPU-hours   : {round(total_h, 3)}",
+        f"- canonical verbal format: {report.get('canonical_format')}",
+        "",
+        "| Run-log ID | What it did | Outcome | Headline |",
+        "|---|---|---|---|",
+    ]
     for hid, verdict in report["hypotheses"].items():
         if verdict:
             lines.append(f"| {cfg.RUN_NAME}_{hid} | {hid} per PLAN §13 | "
                          f"{'pass' if 'supported' in str(verdict) else 'null/falsified'} | {verdict} |")
     (PATHS["meta"] / "run_log_rows.md").write_text("\n".join(lines))
+    if unbound:
+        LOG.log("provenance_unbound", note="code_sha is UNBOUND — set CODE_SHA before a production run")
     LOG.log("report_written", cells_committed=len(committed), gpu_hours=round(total_h, 2))
     return report
 
@@ -3761,36 +5751,56 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
     sweep = stage_probe(bank, graded, entropy, commitments, cfg) if "probe" in cfg.STAGES else \
         (pd.read_parquet(PATHS["derived"] / "probe_sweep.parquet")
          if (PATHS["derived"] / "probe_sweep.parquet").exists() else pd.DataFrame())
-    gate3 = gate3_verdict(sweep, cfg)
+    # Only trust the blocked-cell list when the probe stage actually produced
+    # it this run; on a stats-only rerun the file on disk describes a different
+    # set of activations.
+    gate3 = gate3_verdict(sweep, cfg,
+                          blocked=(json_read(PATHS["derived"] / "gate3_blocked_cells.json", {})
+                                   if "probe" in cfg.STAGES else {}))
 
-    signals, meta = assemble_signals(bank, graded, entropy, sweep, commitments, cfg) \
+    signals, meta = assemble_signals(bank, graded, entropy, sweep, commitments, cfg, gate3=gate3) \
         if "calibrate" in cfg.STAGES else (pd.DataFrame(), {"verbal_long": pd.DataFrame()})
 
+    # ---- Gate 1 BEFORE the hypothesis tests ------------------------------
+    # PLAN §16 conditions H2 on "AND Gate 1 holds", so the grading-sanity
+    # verdict has to exist before H2 is evaluated. The judge used to run after
+    # the stats block, which is why H2's pass rule silently dropped the
+    # conjunct: the value simply was not available yet (AUDIT finding 8).
+    judge = stage_judge(bank, graded, judge_cfg, cfg) if judge_cfg.ENABLED else {"enabled": False}
+    if len(graded):
+        sheet_path = export_manual_check_sheet(bank, graded, cfg)
+        manual = ingest_manual_sheet(sheet_path, cfg)
+        judge["manual"] = manual
+        judge["gate1_pass"] = combined_gate1(judge, manual, cfg)
+
     h0 = h1 = h2 = h3 = h4 = hlr = {}
+    popularity = matched = {}
     abst = {"by_category": {}, "per_cell": {}}
     corr, omni = pd.DataFrame(), pd.DataFrame()
     if "stats" in cfg.STAGES and len(signals):
         h0 = test_h0_format_agreement(meta["verbal_long"], cfg)
         h1 = test_h1_signal_calibration(signals, cfg)
-        h2 = test_h2_quadrants(signals, bank, cfg)
+        h2 = test_h2_quadrants(signals, bank, cfg,
+                               gate1_pass=judge.get("gate1_pass"), gate3=gate3)
         abst = abstention_split(graded, cfg)
         omni = omniscience_index(graded)
         h3 = test_h3_base_vs_instruct(signals, abst, cfg)
-        h4 = test_h4_depth(sweep, cfg)
-        hlr = hierarchical_regression(signals, cfg)
+        h4 = test_h4_depth(sweep, cfg, gate3=gate3)
+        hlr = hierarchical_regression(signals, cfg, bank=bank)
+        popularity = popularity_contrast(signals, graded, cfg)
+        matched = difficulty_matched_view(signals, cfg)
         corr = correlation_table(signals, cfg)
 
-    # ---- optional post-hoc judge audit (loads last, frees itself) ---------
-    judge = stage_judge(bank, graded, judge_cfg, cfg) if judge_cfg.ENABLED else {"enabled": False}
-    if len(graded):
-        export_manual_check_sheet(bank, graded, cfg)
-
     if "figures" in cfg.STAGES:
-        stage_figures(signals, sweep, h1, h3, abst, corr, commitments, cfg)
+        # Figure 4 is the depth-curve figure; it must show the same cells H4
+        # was computed over, not the unfiltered sweep.
+        sweep_fig, _ = gate3_filter_sweep(sweep, gate3, cfg)
+        stage_figures(signals, sweep_fig, h1, h3, abst, corr, commitments, cfg)
     if "tables" in cfg.STAGES:
         stage_tables(bank, graded, signals, sweep, entropy, corr, commitments,
                      h0, h1, h2, h3, h4, abst, omni, cfg)
-    report = stage_report(bank, commitments, h0, h1, h2, h3, h4, gate3, judge, sanity, hlr, cfg) \
+    report = stage_report(bank, commitments, h0, h1, h2, h3, h4, gate3, judge, sanity, hlr, cfg,
+                          popularity=popularity, matched=matched) \
         if "report" in cfg.STAGES else {}
 
     free_cuda()
@@ -3800,6 +5810,7 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
     return {"bank": bank, "commitments": commitments, "graded": graded, "entropy": entropy,
             "sweep": sweep, "signals": signals, "h0": h0, "h1": h1, "h2": h2, "h3": h3,
             "h4": h4, "hlr": hlr, "corr": corr, "omni": omni, "abstention": abst,
+            "popularity": popularity, "difficulty_matched": matched,
             "gate3": gate3, "judge": judge, "report": report}
 
 

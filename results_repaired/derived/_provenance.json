@@ -1,0 +1,7 @@
+{
+ "source": "/home/manan/Projects/2hand/Confidence-AI/results",
+ "generated_by": "audit_docs/reanalyse.py",
+ "internal_signal": "UNAVAILABLE - activation shards absent; probe/H4/Gate 3 not rebuilt",
+ "entropy_weighting": "counts - no sequence log-probs in this run's artefacts",
+ "h2_features": "UNAVAILABLE - no question text survives"
+}

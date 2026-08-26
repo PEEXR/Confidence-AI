@@ -124,7 +124,51 @@ tier logs a `tier_short` event rather than silently under-delivering.
 | `GREEDY_TEMPERATURE` | `0.0` | Formats A/B/C and the extraction pass. |
 | `SAMPLE_TEMPERATURE` | `0.8` | Signal 2. **Asserted ≥ 0.7** — T=0 gives entropy 0 always (PLAN §5). |
 | `SAMPLE_TOP_P` | `0.95` | |
-| `N_SAMPLES` | `10` | PLAN §5 N=10. The dominant cost term. |
+| `N_SAMPLES` | `10` | PLAN §5 N=10. The dominant cost term. Also the **fixed** entropy denominator: $H_{\max} = \log N_{\text{SAMPLES}}$. |
+| `ENTROPY_MIN_VALID` | `8` | Below this many parsed samples, `confidence_behavioral` is `NaN`. Previously entropy was normalised by the number of samples that happened to parse, so a question with one parsed answer scored a perfect `1.0` (AUDIT finding 3, 7.9% of rows). |
+| `ENTROPY_LP_WEIGHTED` | `True` | Weight semantic-cluster mass by length-normalised sequence log-probability instead of raw sample counts. |
+
+Log-probs come from a **separate teacher-forced scoring pass**
+(`sequence_logprobs`), chunked over rows and time so peak memory stays bounded.
+Two cheaper routes were measured and rejected:
+
+- `output_scores=True` makes `generate()` retain one `[batch × n_return,
+  vocab]` float tensor *per generated token*. At Qwen2.5's ~152k vocabulary a
+  512-token N=10 sampling batch is tens of gigabytes — more than
+  `auto_batch_size` budgets for, and on some cells more than the card holds.
+  (CELL 10 refuses `output_hidden_states=True` for the same reason.)
+- A `LogitsProcessor` is cheap but does not see a well-defined quantity:
+  transformers applies custom processors *before* the sampling warpers, so it
+  reads logits with `repetition_penalty` applied but not temperature or top-p.
+  Measured against both references, it matches neither, and the ordering is an
+  implementation detail that can change between versions.
+
+The scoring pass therefore reports the **raw model likelihood**, unwarped by
+`SAMPLE_TEMPERATURE` / `SAMPLE_TOP_P` — the quantity the semantic-entropy
+literature uses.
+
+**It is not free.** The pass sees `prompt_len + max_new` token positions per
+row against `max_new` for the whole decode loop — 2.7× (C3) to 6× (R1) the
+positions — so it roughly **doubles the arithmetic of the SAMPLE stage**. In
+wall clock that is ~1.35× at batch size 1, where decode is memory-bandwidth
+bound and this pass is not, rising to ~2× at the batch sizes `auto_batch_size`
+actually picks (7–8 for the 7B models), because at those sizes decode is
+compute-bound too and the discount disappears. Peak memory is ~0.55 GB per
+chunk at `row_chunk=4`, independent of prompt length. The measured
+`compute_ledger` captures the cost; the a-priori budget estimate does not.
+
+Set `ENTROPY_LP_WEIGHTED=False` to skip it entirely and weight by sample counts
+— that restores the pre-audit behaviour and the pre-audit cost.
+
+A cell falls back to count weighting **wholesale** if any of its sample records
+predate log-prob recording — logged as `entropy_mixed_weighting`. Calibration
+and the entropy median are both per-cell, so a cell has to be on one scale;
+delete the sample checkpoint to regenerate it. `lp_weighted` is recorded per
+row.
+
+Because mass is length-normalised, a cluster with fewer samples can carry more
+mass. `modal_share` (sample fraction) and `modal_mass` (probability fraction)
+are therefore reported as separate columns.
 | `N_FEWSHOT_BASE` | `4` | Exemplars for `7b-base`, which has no chat template. |
 | `STOP_ON_DOUBLE_NEWLINE` | `False` | **Inert.** |
 
@@ -178,26 +222,74 @@ Regardless of mode, GPU memory is cleared and checkpoints flushed after
 
 | Field | Default | Notes |
 |---|---|---|
-| `ACCURACY_BAND` | `(0.25, 0.80)` | PLAN §3. Cells outside are excluded — a ragged grid is the planned outcome. |
-| `COMMIT_CELLS_OUTSIDE_BAND` | `False` | `True` bypasses the gate and **records the violation**. Needed for smoke runs, where a 5-question pilot can't land in the band meaningfully. |
+| `ACCURACY_BAND` | `(0.25, 0.80)` | PLAN §3. **Reported, not enforced.** Recorded per cell as the `in_band` covariate. |
+| `COMMIT_CELLS_OUTSIDE_BAND` | `True` | Every cell commits. Set `False` to restore the pre-audit deleting behaviour. |
+
+Conditioning cell inclusion on accuracy is a legitimate base-rate control —
+per the audit it is this project's best claim to novelty, because every
+published cross-signal comparison confounds method signal with item
+difficulty. **Deleting cells is the wrong way to implement it.** It removed all
+of R2, all of R3, all of 0.5B and 5/6 of C3 — three quarters of the grid — and
+the selection ran on a noisy n=100 pilot whose estimate for one cell moved
+0.74 → 0.58 between runs (AUDIT finding 9).
+
+The control is kept and the deletion dropped. `in_band` and `pilot_accuracy`
+travel with every signal row, and the base rate is now held fixed two ways:
+`difficulty_matched_view` bins questions by their **cross-model** correctness
+rate within a tier and compares signals inside a bin, and
+`hierarchical_regression` carries a random intercept for the model × tier cell.
 
 ## Probe (Signal 3)
 
 | Field | Default | Notes |
 |---|---|---|
 | `PERCENTILES` | `(0, 25, 50, 75, 100)` | Depth taps. `0` = embedding output, `100` = final block. |
-| `PROBE_LABEL` | `"correct"` | `correct` = ground truth; `entropy` = median-split semantic entropy (the Semantic Entropy Probes formulation, PLAN §6·5). |
+| `PROBE_LABEL` | `"entropy"` | `entropy` = median-split semantic entropy (the Semantic Entropy Probes formulation, PLAN §6·5); `correct` = ground truth, retained as a **supervised reference mode**. |
 
-Label source priority is `EXTRACT → FORCED → SAMPLE`. Only `EXTRACT` is the
-greedy pass whose activations were actually tapped, so anything else is label
-noise relative to its paired feature vector and logs a `probe_label_fallback`
-event. Check the log before trusting a probe AUROC.
+`PROBE_LABEL` defaulted to `"correct"` before the audit. That made the probe a
+second supervised accuracy predictor, so the "three-signal comparison" raced
+one unsupervised signal (entropy) against two supervised ones — and all three
+were then calibrated to P(correct) anyway (AUDIT finding 4). PLAN §6·5
+recommends the entropy label; it is now the default, which makes the
+comparison symmetric.
+
+With `PROBE_LABEL="correct"`, label source priority is `EXTRACT → FORCED →
+SAMPLE`. Only `EXTRACT` is the greedy pass whose activations were actually
+tapped, so anything else is label noise relative to its paired feature vector
+and logs a `probe_label_fallback` event. Check the log before trusting a probe
+AUROC.
 | `PROBE_MAX_ITER` | `2000` | Logistic regression iterations. |
 | `PROBE_STORE_DTYPE` | `"float32"` | PLAN §16 standing risk 1 — never store activations in half precision. |
 | `AUROC_GATE` | `0.65` | Gate 3 threshold and the H4 onset definition. |
 | `LABEL_SHUFFLE_REPEATS` | `20` | Null distribution size. Winner must beat its p95. |
 | `SURFACE_BASELINE` | `True` | TF-IDF prompt-only control (PLAN §14.1). **Leave on** — §17.3 requires every activation measurement to ship one. |
-| `PROBE_C_GRID` | `(0.01, 0.1, 1.0, 10.0)` | **Inert** — the probe uses `C=1.0` fixed. |
+| `PROBE_C_GRID` | `(0.01, 0.1, 1.0, 10.0)` | Regularisation strengths searched by `select_probe_C`. |
+| `PROBE_C_SELECT` | `True` | Pick `C` by 3-fold CV **inside the training split**, ties broken toward the **smaller** C. `False` restores the fixed `C=1.0`. |
+| `GATE3_ENFORCE` | `True` | Block probe fitting on cells with non-finite activations, rather than fitting and noting it afterwards. |
+| `P0_NEG_CONTROL_TOL` | `0.10` | Gate 3 fails a cell when \|AUROC(p0) − 0.5\| exceeds this. |
+
+`PROBE_C_GRID` was declared and never read: every probe was fit at `C=1.0`,
+which on a ~3584-dimensional activation with a few hundred training rows is
+barely regularised — hence `auroc_train = 1.000` in 51 of 65 rows (AUDIT
+finding 8). The shuffle nulls refit at the **selected** C, since a null fitted
+at a different regularisation strength is not a null for that probe.
+
+Selection runs inside TRAIN, not on calibration, even though calibration is
+where the winning percentile is chosen. Calibration AUROC is not only a
+selection statistic here — the same number drives `meets_gate`, the layer
+choice and Gate 3 — so maximising it over four values of C and then gating on
+the maximum is selection on the test statistic. Measured on pure noise
+(200 trials, n=160, d=40), doing so moved mean calibration AUROC 0.5046 →
+0.5234 and the false-pass rate at the 0.65 gate from 1.5% to 4.0%.
+
+**The p0 negative control.** Percentile 0 is the output of `embed_tokens` at
+the last prompt token. Under every PLAN §4/§6 prompt template that position is
+a fixed template suffix, and a token embedding carries no position or context
+— so p0 is the *same vector* for every question in a cell, and a probe on a
+constant cannot separate anything. AUROC there must be ≈ 0.50. The pre-audit
+tap scored **0.717**, which is how the audit established it was reading a
+generated token rather than a prompt token. Making this control blocking means
+that class of bug cannot reach a results table unnoticed again.
 
 Layer selection happens on the **calibration split only**, never train or test
 (PLAN §6·6, §14.2).
@@ -233,6 +325,8 @@ Layer selection happens on the **calibration split only**, never train or test
 | `CALIBRATOR` | `"auto"` | `auto \| isotonic \| platt`. Auto picks isotonic when n ≥ `ISOTONIC_MIN_N`. |
 | `ISOTONIC_MIN_N` | `200` | Below this, isotonic overfits — fall back to Platt (PLAN §8·1). |
 | `MIN_DISTINCT_VERBAL` | `3` | Verbal pre-flight: a cell with fewer distinct confidence values is **excluded**, not reported as poorly calibrated (PLAN §8·6). |
+| `GATE3_ENFORCE` (see Probe) | `True` | Also gates the **data path**: a cell failing Gate 3 contributes no `internal_cal` at all, and is listed in `derived/internal_gate3_skipped.json`. |
+| `GROUND_TRUTH_VARIANT` | `"EXTRACT"` | Which generation defines `correct` for **all three** signals. Accuracy differs by up to 12 points across A/B/C/SAMPLE/EXTRACT, so scoring the verbal signal against one variant's correctness while the probe trains on another's compares three signals to three different targets (AUDIT finding 4). `EXTRACT` is the plain answering pass the activations were tapped from. |
 | `QUADRANT_THRESHOLD` | `0.5` | Split point on calibrated scores for hopeful/suppressed. |
 | `HLR_METHOD` | `"auto"` | `auto \| bayes_mixed \| cluster_robust`. Auto tries `BinomialBayesMixedGLM`, falls back to a cluster-robust logit. **Check `method` in the output before quoting coefficients.** |
 
@@ -320,9 +414,11 @@ Those are the two families to prioritise in the manual check sheet.
 
 Declared but never read. Setting them does nothing:
 
-`NOTES` · `STOP_ON_DOUBLE_NEWLINE` · `PROBE_C_GRID` ·
+`NOTES` · `STOP_ON_DOUBLE_NEWLINE` ·
 `GATE4_REQUIRE_BASE_ELICITATION` · `BASE_ELICITATION_MIN_PARSE_RATE` ·
 `FIG_STYLE`
+
+`PROBE_C_GRID` was on this list; it is now consumed by `select_probe_C`.
 
 They change `CFG.hash()`, so avoid editing them — you'd fork the fingerprint
 without changing the run.
