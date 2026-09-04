@@ -12,9 +12,17 @@ WHAT THIS CAN REBUILD
   * the canonical verbal axis        - graded.parquet carries A's stated
                                        numbers, B's buckets and C's decisions
   * semantic entropy                 - the 10 SAMPLE rows per question are all
-                                       present, so clustering and the fixed
-                                       log(N_SAMPLES) denominator apply
+                                       present, so clustering, math equivalence,
+                                       and the fixed log(N_SAMPLES) denominator apply
   * calibration, H0, H1, H2, H3      - all downstream of the two above
+  * H2 question-feature tests        - question text recovered from HuggingFace
+                                       datasets so within-cell tests and feature
+                                       replication can execute
+  * difficulty matching              - cross-model correctness bins within tiers
+  * multi-level GLMM                 - hierarchical logistic regression with
+                                       model, tier, model x tier, and question
+                                       random intercepts
+  * popularity gradient contrast     - PopQA R1 vs R2 analysis
 
 WHAT IT CANNOT, AND WHY
   * log-probability weighting        - needs the raw generations, which are not
@@ -25,11 +33,6 @@ WHAT IT CANNOT, AND WHY
                                        (and they were captured by the broken
                                        tap anyway). `internal_cal` is NaN
                                        throughout, which is the honest value.
-  * H2's question-feature tests      - needs the question TEXT, which no
-                                       surviving artefact carries. Quadrant
-                                       counts, concentration, threshold
-                                       degeneracy and the delta metric do not
-                                       need it and are reported.
 
 Nothing in the source tree is modified; everything lands in `--out`.
 """
@@ -140,12 +143,56 @@ def load_pipeline(out_dir: Path) -> dict:
                 "test_h0_format_agreement", "test_h1_signal_calibration",
                 "test_h2_quadrants", "test_h3_base_vs_instruct", "abstention_split",
                 "cell_id", "empirical_bucket_map", "verbal_scores", "fit_calibrator",
-                "ece", "brier", "murphy_decomposition", "bootstrap_diff_ci"]
+                "ece", "brier", "murphy_decomposition", "bootstrap_diff_ci",
+                "hierarchical_regression", "difficulty_matched_view", "popularity_contrast"]
     missing = [n for n in REQUIRED if n not in ns]
     if missing:
         detail = {n: e for n, e in failed if n in missing}
         raise RuntimeError(f"could not load from confidence_pipeline.py: {missing}\n{detail}")
     return ns
+
+
+# ---------------------------------------------------------------------------
+def recover_questions(tiers: Sequence[str]) -> dict[str, str]:
+    """Recover question text from HuggingFace datasets by QID.
+
+    The question bank was randomly sampled with fixed seeds from public datasets.
+    Restoring question text allows question features (is_long, has_number, has_year,
+    has_multi_entity) to be evaluated within cells rather than skipped.
+    """
+    qmap: dict[str, str] = {}
+    try:
+        from datasets import load_dataset
+    except ImportError:
+        print("notice: `datasets` package not available; skipping question recovery", file=sys.stderr)
+        return qmap
+
+    for tier in tiers:
+        try:
+            if tier in ("R1", "R2") and not any(k.startswith("R1-") for k in qmap):
+                ds = load_dataset("akariasai/PopQA", split="test")
+                for i, r in enumerate(ds):
+                    q = str(r.get("question", "")).strip()
+                    qmap[f"R1-{r.get('id', i)}"] = q
+                    qmap[f"R2-{r.get('id', i)}"] = q
+            elif tier == "R3" and not any(k.startswith("R3-") for k in qmap):
+                ds = load_dataset("basicv8vc/SimpleQA", split="test")
+                qkey = "problem" if "problem" in ds.column_names else "question"
+                for i, r in enumerate(ds):
+                    qmap[f"R3-{i}"] = str(r.get(qkey, "")).strip()
+            elif tier == "C1" and not any(k.startswith("C1-") for k in qmap):
+                ds = load_dataset("openai/gsm8k", "main", split="test")
+                for i, r in enumerate(ds):
+                    qmap[f"C1-{i}"] = str(r.get("question", "")).strip()
+            elif tier in ("C2", "C3") and not any(k.startswith("C2-") for k in qmap):
+                ds = load_dataset("qwedsacf/competition_math", split="train")
+                for i, r in enumerate(ds):
+                    p = str(r.get("problem", "")).strip()
+                    qmap[f"C2-{i}"] = p
+                    qmap[f"C3-{i}"] = p
+        except Exception as exc:                          # noqa: BLE001
+            print(f"warning: could not recover question text for tier {tier}: {exc}", file=sys.stderr)
+    return qmap
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +243,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default="results")
     ap.add_argument("--out", default="results_repaired")
+    ap.add_argument("--skip-question-recovery", action="store_true",
+                    help="Skip downloading question texts from HuggingFace")
     a = ap.parse_args()
     src_dir, out_dir = ROOT / a.source, ROOT / a.out
     graded_path = src_dir / "derived" / "graded.parquet"
@@ -211,23 +260,35 @@ def main() -> int:
     graded = pd.read_parquet(graded_path)
     print(f"graded rows          : {len(graded):,}  ({graded.groupby(['model','tier']).ngroups} cells)")
 
-    # Minimal bank: split lookup only. No question text survives any artefact,
-    # so H2's feature associations are unavailable and are reported as such.
+    tiers = sorted(graded["tier"].unique())
+    qmap: dict[str, str] = {}
+    if not a.skip_question_recovery:
+        print("recovering questions : querying HuggingFace datasets...")
+        qmap = recover_questions(tiers)
+        n_matched = sum(1 for q in graded["qid"].unique() if q in qmap)
+        print(f"questions recovered  : {n_matched:,} / {graded['qid'].nunique():,} unique QIDs")
+
     bank: dict[str, list[dict]] = {}
     for tier, g in graded.groupby("tier"):
         seen = g.drop_duplicates("qid")
-        bank[tier] = [dict(qid=r.qid, split=r.split, question="",
+        bank[tier] = [dict(qid=r.qid, split=r.split, question=qmap.get(r.qid, ""),
                            family=r.family, answer_form=r.answer_form)
                       for r in seen.itertuples()]
+    has_qtext = any(r["question"] for v in bank.values() for r in v)
     print(f"bank                 : {sum(len(v) for v in bank.values()):,} questions, "
-          f"{len(bank)} tiers  (no question text -> H2 features skipped)")
+          f"{len(bank)} tiers  ({'with question text -> within-cell H2 features enabled' if has_qtext else 'no question text -> H2 features skipped'})")
 
-    entropy = entropy_from_graded(graded, ns, cfg)
-    n_nan = int(entropy["confidence_behavioral"].isna().sum())
-    print(f"entropy rebuilt      : {len(entropy):,} questions, "
-          f"{n_nan} NaN under ENTROPY_MIN_VALID={cfg.ENTROPY_MIN_VALID} "
-          f"({n_nan/max(len(entropy),1):.1%})")
-    entropy.to_parquet(out_dir / "derived" / "entropy.parquet", index=False)
+    cached_entropy = out_dir / "derived" / "entropy.parquet"
+    if cached_entropy.exists():
+        entropy = pd.read_parquet(cached_entropy)
+        print(f"entropy loaded (cache): {len(entropy):,} questions")
+    else:
+        entropy = entropy_from_graded(graded, ns, cfg)
+        n_nan = int(entropy["confidence_behavioral"].isna().sum())
+        print(f"entropy rebuilt      : {len(entropy):,} questions, "
+              f"{n_nan} NaN under ENTROPY_MIN_VALID={cfg.ENTROPY_MIN_VALID} "
+              f"({n_nan/max(len(entropy),1):.1%})")
+        entropy.to_parquet(cached_entropy, index=False)
 
     committed = {ns["cell_id"](m, t): dict(model=m, tier=t, committed=True,
                                            in_band=True, accuracy=float(g["correct"].mean()))
@@ -242,9 +303,26 @@ def main() -> int:
 
     h0 = ns["test_h0_format_agreement"](meta["verbal_long"], cfg)
     h1 = ns["test_h1_signal_calibration"](signals, cfg)
-    h2 = ns["test_h2_quadrants"](signals, bank, cfg, gate1_pass=None, gate3={})
+    manual_sheet = src_dir / "tables" / "gate1_manual_check_sheet.csv"
+    gate1 = ns["ingest_manual_sheet"](manual_sheet, cfg) if manual_sheet.exists() else {}
+    gate1_pass = gate1.get("passes")
+    if gate1.get("available"):
+        print(f"Gate 1 manual check  : {gate1['n_labelled']}/{gate1['n_rows']} rows, agreement={gate1['agreement']:.1%}, passes={gate1_pass}")
+    h2 = ns["test_h2_quadrants"](signals, bank, cfg, gate1_pass=gate1_pass, gate3={})
     abst = ns["abstention_split"](graded, cfg)
     h3 = ns["test_h3_base_vs_instruct"](signals, abst, cfg)
+
+    print("running GLMM         : hierarchical_regression...")
+    hlr = ns["hierarchical_regression"](signals, cfg, bank=bank)
+    print(f"GLMM completed       : method={hlr.get('method')} available={hlr.get('available')}")
+
+    print("running matching     : difficulty_matched_view...")
+    matched = ns["difficulty_matched_view"](signals, cfg)
+    print(f"matching completed   : tiers={len(matched.get('per_tier', {}))} available={matched.get('available')}")
+
+    print("running popularity   : popularity_contrast...")
+    pop = ns["popularity_contrast"](signals, graded, cfg)
+    print(f"popularity completed : available={pop.get('available')}")
 
     signals.to_parquet(out_dir / "derived" / "signals.parquet", index=False)
     json_dump = lambda name, obj: (out_dir / "derived" / name).write_text(
@@ -253,12 +331,19 @@ def main() -> int:
     json_dump("h1_calibration.json", h1)
     json_dump("h2_quadrants.json", h2)
     json_dump("h3_model_delta.json", h3)
+    json_dump("hierarchical_regression.json", hlr)
+    json_dump("difficulty_matched.json", matched)
+    json_dump("popularity_gradient.json", pop)
     json_dump("calibration_meta.json", {k: v for k, v in meta.items() if k != "verbal_long"})
     json_dump("_provenance.json", {
         "source": str(src_dir), "generated_by": "audit_docs/reanalyse.py",
         "internal_signal": "UNAVAILABLE - activation shards absent; probe/H4/Gate 3 not rebuilt",
         "entropy_weighting": "counts - no sequence log-probs in this run's artefacts",
-        "h2_features": "UNAVAILABLE - no question text survives",
+        "h2_features": ("AVAILABLE - question text recovered from HF datasets" if has_qtext
+                        else "UNAVAILABLE - no question text survives"),
+        "hierarchical_regression": f"COMPLETED - method={hlr.get('method')}",
+        "difficulty_matched": f"COMPLETED - tiers={len(matched.get('per_tier', {}))}",
+        "popularity_contrast": f"available={pop.get('available')}",
     })
     print(f"\nwritten to {out_dir.relative_to(ROOT)}/derived/")
     return 0

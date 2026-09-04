@@ -1,0 +1,42 @@
+{
+  "p0": {
+    "n": 768000,
+    "nonfinite_frac": 0.0,
+    "nan_frac": 0.0,
+    "inf_frac": 0.0,
+    "absmax": 0.146484375,
+    "std": 0.030957868322730064
+  },
+  "p25": {
+    "n": 768000,
+    "nonfinite_frac": 0.0,
+    "nan_frac": 0.0,
+    "inf_frac": 0.0,
+    "absmax": 19.75,
+    "std": 0.945164680480957
+  },
+  "p50": {
+    "n": 768000,
+    "nonfinite_frac": 0.0,
+    "nan_frac": 0.0,
+    "inf_frac": 0.0,
+    "absmax": 25.75,
+    "std": 1.142439365386963
+  },
+  "p75": {
+    "n": 768000,
+    "nonfinite_frac": 0.0,
+    "nan_frac": 0.0,
+    "inf_frac": 0.0,
+    "absmax": 37.5,
+    "std": 1.770129919052124
+  },
+  "p100": {
+    "n": 768000,
+    "nonfinite_frac": 0.0,
+    "nan_frac": 0.0,
+    "inf_frac": 0.0,
+    "absmax": 63.0,
+    "std": 4.302215576171875
+  }
+}

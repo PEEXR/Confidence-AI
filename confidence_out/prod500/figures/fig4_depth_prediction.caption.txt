@@ -1,0 +1,1 @@
+Figure 4 — AUROC vs layer percentile, one line per tier, faceted by model size. Predicted under H4: retrieval tiers flat and high from ~0% depth; reasoning tiers at chance until late layers, onset shifting earlier as scale grows. Null: all tiers flat at chance inside the shuffle band.

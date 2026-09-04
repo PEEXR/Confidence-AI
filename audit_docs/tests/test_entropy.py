@@ -8,7 +8,8 @@ from typing import Any, Callable, Sequence
 SRC = open(Path(__file__).resolve().parents[2] / "confidence_pipeline.py").read()
 tree = ast.parse(SRC)
 WANT = {"normalize_text", "normalize_math", "extract_number", "grade_latex", "grade_numeric",
-        "math_equal", "_union_find_merge", "cluster_answers", "cluster_mass", "_numeric_equal"}
+        "math_equal", "_union_find_merge", "union_find_merge", "cluster_answers", "cluster_mass",
+        "_numeric_equal", "numeric_equal"}
 ns = {"np": np, "sps": sps, "re": re, "Counter": Counter, "Any": Any,
       "LOG": type("L", (), {"log": staticmethod(lambda *a, **k: None)})(),
       "Callable": Callable, "Sequence": Sequence,

@@ -1,0 +1,140 @@
+{
+  "available": true,
+  "n": 1166,
+  "formula": "correct ~ verbal_cal + behavioral_cal + internal_cal + is_reasoning + log_params + is_long + has_number + has_multi_entity + has_year + in_band + behavioral_cal_missing + internal_cal_missing + is_reasoning:internal_cal + log_params:internal_cal + layer_pct:is_reasoning",
+  "fixed_effects": [
+    "verbal_cal",
+    "behavioral_cal",
+    "internal_cal",
+    "is_reasoning",
+    "log_params",
+    "is_long",
+    "has_number",
+    "has_multi_entity",
+    "has_year",
+    "in_band",
+    "behavioral_cal_missing",
+    "internal_cal_missing"
+  ],
+  "imputed_counts": {
+    "behavioral_cal": 202,
+    "internal_cal": 270
+  },
+  "missingness_indicators": [
+    "behavioral_cal_missing",
+    "internal_cal_missing"
+  ],
+  "signals_dropped_all_missing": [],
+  "signals_near_all_missing": {},
+  "terms_dropped_degenerate": {},
+  "random_intercepts_requested": [
+    "question",
+    "model",
+    "tier",
+    "model_x_tier"
+  ],
+  "random_intercepts_fitted": [
+    "model",
+    "model_x_tier",
+    "question",
+    "tier"
+  ],
+  "n_questions": 600,
+  "n_cells": 12,
+  "per_cell": {
+    "qwen2.5-0.5b-instruct__C1": {
+      "n": 94,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-0.5b-instruct__C2": {
+      "n": 97,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-0.5b-instruct__C3": {
+      "n": 76,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-3b-instruct__C1": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-3b-instruct__C3": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-3b-instruct__R1": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-3b-instruct__R2": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-7b-instruct__C2": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-7b-instruct__C3": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-7b-instruct__R1": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-7b-instruct__R2": {
+      "n": 99,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-7b-instruct__R3": {
+      "n": 100,
+      "error": "Singular matrix"
+    }
+  },
+  "method": "bayes_mixed_glm",
+  "converged": true,
+  "fit_warnings": [],
+  "random_intercepts_dropped": [],
+  "params": {
+    "Intercept": -2.9678385865722032,
+    "verbal_cal": -1.9495084645743115,
+    "behavioral_cal": 7.410265791672527,
+    "internal_cal": 1.0642348034972282,
+    "is_reasoning": 1.3857557363834845,
+    "log_params": -0.43793450267093026,
+    "is_long": -1.0402451635016103,
+    "has_number": -0.11549504632533303,
+    "has_multi_entity": -0.11856967835284468,
+    "has_year": -0.6587955834399027,
+    "in_band": 0.4560481354158376,
+    "behavioral_cal_missing": -1.5723020919571116,
+    "internal_cal_missing": -1.3767180039400075,
+    "is_reasoning:internal_cal": -0.8703997448666309,
+    "log_params:internal_cal": 0.7109054992649784,
+    "layer_pct:is_reasoning": -0.008765049825712957
+  },
+  "sd": {
+    "Intercept": 0.09420513927933744,
+    "verbal_cal": 0.252651911071139,
+    "behavioral_cal": 0.2189945967993966,
+    "internal_cal": 0.24848603570578365,
+    "is_reasoning": 0.12152461276109146,
+    "log_params": 0.060194103715848116,
+    "is_long": 0.13767493594931418,
+    "has_number": 0.12213045055066775,
+    "has_multi_entity": 0.1263032655501999,
+    "has_year": 0.5570796738636443,
+    "in_band": 0.11591528398779266,
+    "behavioral_cal_missing": 0.29066073253272084,
+    "internal_cal_missing": 0.23090258316702905,
+    "is_reasoning:internal_cal": 0.298481967269386,
+    "log_params:internal_cal": 0.14288016437529505,
+    "layer_pct:is_reasoning": 0.0015337559148666739
+  },
+  "vc_sd": {
+    "question": 0.36675091997303777,
+    "model": -1.4552543246165746,
+    "tier": -1.7476454782908326,
+    "model_x_tier": -1.030043263289861
+  }
+}

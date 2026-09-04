@@ -1,0 +1,13 @@
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archive packages
+*.zip
+*.tar.gz
+*.7z
+
+# Development scratch files
+scratch/
+.tempmediaStorage/

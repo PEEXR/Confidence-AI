@@ -1,0 +1,203 @@
+{
+  "tiers": {
+    "R1": "top_quintile",
+    "R2": "bottom_quintile",
+    "R3": "adversarial"
+  },
+  "available": true,
+  "per_model": {
+    "qwen2.5-0.5b-instruct": {
+      "R1": {
+        "n": 100,
+        "accuracy": 0.0,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": 0.8776280847730904,
+        "internal_cal_mean": null,
+        "delta_verbal_behavioral_mean": null
+      },
+      "R2": {
+        "n": 100,
+        "accuracy": 0.0,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": null,
+        "internal_cal_mean": null,
+        "delta_verbal_behavioral_mean": null
+      },
+      "R3": {
+        "n": 100,
+        "accuracy": 0.01,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": 0.19380381593409574,
+        "internal_cal_mean": null,
+        "delta_verbal_behavioral_mean": null
+      }
+    },
+    "qwen2.5-1.5b-instruct": {
+      "R1": {
+        "n": 100,
+        "accuracy": 0.33,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": 0.34998637006459615,
+        "internal_cal_mean": 0.3334653316001361,
+        "delta_verbal_behavioral_mean": null
+      },
+      "R2": {
+        "n": 100,
+        "accuracy": 0.21,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": 0.1782203014686021,
+        "internal_cal_mean": 0.15696760285845587,
+        "delta_verbal_behavioral_mean": null
+      },
+      "R3": {
+        "n": 100,
+        "accuracy": 0.03,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": 0.019525536668358937,
+        "internal_cal_mean": 0.020293890403473572,
+        "delta_verbal_behavioral_mean": null
+      }
+    },
+    "qwen2.5-3b-instruct": {
+      "R1": {
+        "n": 100,
+        "accuracy": 0.36,
+        "verbal_cal_mean": 0.435905694708552,
+        "behavioral_cal_mean": 0.4305400270823363,
+        "internal_cal_mean": null,
+        "delta_verbal_behavioral_mean": 0.0053656676262157
+      },
+      "R2": {
+        "n": 100,
+        "accuracy": 0.17,
+        "verbal_cal_mean": 0.1523849653815862,
+        "behavioral_cal_mean": 0.14559408275938757,
+        "internal_cal_mean": 0.13450427768631507,
+        "delta_verbal_behavioral_mean": 0.006790882622198611
+      },
+      "R3": {
+        "n": 100,
+        "accuracy": 0.05,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": 0.07712498065592471,
+        "internal_cal_mean": 0.08238343091970847,
+        "delta_verbal_behavioral_mean": null
+      }
+    },
+    "qwen2.5-7b-base": {
+      "R1": {
+        "n": 100,
+        "accuracy": 0.53,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": 0.5226654845338718,
+        "internal_cal_mean": 0.4854043347598791,
+        "delta_verbal_behavioral_mean": null
+      },
+      "R2": {
+        "n": 100,
+        "accuracy": 0.2,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": 0.15661596198920077,
+        "internal_cal_mean": 0.15596062945752512,
+        "delta_verbal_behavioral_mean": null
+      },
+      "R3": {
+        "n": 100,
+        "accuracy": 0.05,
+        "verbal_cal_mean": null,
+        "behavioral_cal_mean": 0.019664307912536694,
+        "internal_cal_mean": 0.021162701450723666,
+        "delta_verbal_behavioral_mean": null
+      }
+    },
+    "qwen2.5-7b-instruct": {
+      "R1": {
+        "n": 100,
+        "accuracy": 0.46,
+        "verbal_cal_mean": 0.45376696236690656,
+        "behavioral_cal_mean": 0.47397113329257157,
+        "internal_cal_mean": 0.4806488057089357,
+        "delta_verbal_behavioral_mean": -0.020473554726774788
+      },
+      "R2": {
+        "n": 100,
+        "accuracy": 0.19,
+        "verbal_cal_mean": 0.16668783311327454,
+        "behavioral_cal_mean": 0.17895332651542098,
+        "internal_cal_mean": 0.15741961591571377,
+        "delta_verbal_behavioral_mean": -0.010558008701396266
+      },
+      "R3": {
+        "n": 100,
+        "accuracy": 0.04,
+        "verbal_cal_mean": 0.04025796985271806,
+        "behavioral_cal_mean": 0.041184576733240816,
+        "internal_cal_mean": 0.039341519372480406,
+        "delta_verbal_behavioral_mean": -0.0009112509150841104
+      }
+    }
+  },
+  "contrasts": {
+    "qwen2.5-0.5b-instruct": {
+      "accuracy_drop_R1_minus_R2": 0.0,
+      "verbal_cal_drop_R1_minus_R2": null,
+      "confidence_tracks_accuracy": null,
+      "accuracy_drop_ci": {
+        "delta": 0.0,
+        "lo": 0.0,
+        "hi": 0.0,
+        "excludes_zero": false
+      }
+    },
+    "qwen2.5-1.5b-instruct": {
+      "accuracy_drop_R1_minus_R2": 0.12000000000000002,
+      "verbal_cal_drop_R1_minus_R2": null,
+      "confidence_tracks_accuracy": null,
+      "accuracy_drop_ci": {
+        "delta": 0.12000000000000002,
+        "lo": 0.010000000000000009,
+        "hi": 0.24,
+        "excludes_zero": true
+      }
+    },
+    "qwen2.5-3b-instruct": {
+      "accuracy_drop_R1_minus_R2": 0.18999999999999997,
+      "verbal_cal_drop_R1_minus_R2": 0.2835207293269658,
+      "confidence_tracks_accuracy": true,
+      "accuracy_drop_ci": {
+        "delta": 0.18999999999999997,
+        "lo": 0.07,
+        "hi": 0.31,
+        "excludes_zero": true
+      }
+    },
+    "qwen2.5-7b-base": {
+      "accuracy_drop_R1_minus_R2": 0.33,
+      "verbal_cal_drop_R1_minus_R2": null,
+      "confidence_tracks_accuracy": null,
+      "accuracy_drop_ci": {
+        "delta": 0.33,
+        "lo": 0.2097500000000004,
+        "hi": 0.44999999999999996,
+        "excludes_zero": true
+      }
+    },
+    "qwen2.5-7b-instruct": {
+      "accuracy_drop_R1_minus_R2": 0.27,
+      "verbal_cal_drop_R1_minus_R2": 0.287079129253632,
+      "confidence_tracks_accuracy": true,
+      "accuracy_drop_ci": {
+        "delta": 0.27,
+        "lo": 0.15,
+        "hi": 0.39,
+        "excludes_zero": true
+      }
+    }
+  },
+  "interpretation": "confidence_tracks_accuracy=False means calibrated verbalized confidence fell by less than half as much as accuracy did when popularity dropped — stated confidence is not tracking the difficulty manipulation.",
+  "tiers_covered": [
+    "R1",
+    "R2",
+    "R3"
+  ]
+}

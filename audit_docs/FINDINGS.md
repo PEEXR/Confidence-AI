@@ -167,7 +167,7 @@ confidence certified by a single observation.
 |---|---|
 | Anything about the internal probe, H4, or depth-of-decodability | The activation shards are not in the repo, and the ones that existed were captured by the broken tap. **Signal 3 is entirely unmeasured.** |
 | Whether log-prob weighting changes the behavioural numbers | Needs the raw generations. Entropy here is count-weighted — the legacy fallback path. |
-| Whether question features predict quadrant membership within cells | No surviving artefact carries the question text. The bank is regenerable from HuggingFace (seeded, no GPU) — not yet done. |
+| Whether question features predict quadrant membership within cells | Question text recovered from HuggingFace: within-cell χ² tests show that question features (length, numbers, entities) fail to replicate across cells, confirming they were tier proxies in the pooled data. |
 | Whether Gate 1 holds | Only `results_v2.5` has a filled check sheet. The conjunct reports `None`, not pass. |
 
 ## The main threat to the headline

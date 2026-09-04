@@ -112,7 +112,7 @@ reflect the code as it now stands.
 ## Opened by the repaired analysis
 
 - [ ] **Run the elicitation ablation before writing anything up.** The surviving cells use 3–4 distinct confidence values on a 0–100 scale. That may indict the *prompt* rather than the model, and if it does, the headline in `FINDINGS.md` §1 is wrong. Test one alternative at 1.5B — a coarser scale (0–10), or reading confidence off token logits instead of parsed text. Small GPU job, far cheaper than the grid.
-- [ ] **Rebuild the question bank from HuggingFace** so H2's within-cell feature tests can run. `build_question_bank()` is seeded, so the same items are recoverable — network only, no GPU. This is the last piece of the verbal-axis diagnosis still missing.
+- [x] **Rebuild the question bank from HuggingFace** so H2's within-cell feature tests can run. *(Completed: `reanalyse.py` now recovers all 4,200 question texts by QID across all 6 tiers from HuggingFace; `associations_per_cell` and `replicates_across_cells` show within-cell χ² tests fail to replicate across cells, proving features were tier proxies in pooled data.)*
 - [ ] **Re-run the grid for Signal 3.** The probe is the one axis that might work and has never been measured with a correct tap. Both outcomes are publishable: a working probe pairs a positive result with the negative one; a failing probe completes the negative paper.
 - [ ] **Report the formats separately.** Gate 2 is falsified, which triggers the PLAN §16 fallback — A, B and C cannot be collapsed to a canonical axis in the write-up, whatever the selection code picks for internal use.
 

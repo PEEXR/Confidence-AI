@@ -102,7 +102,11 @@ def detect_platform() -> str:
         return "kaggle"
     if os.environ.get("MARIMO_MOLAB") or Path("/molab").exists():
         return "molab"
-    if "MARIMO_ROOT" in os.environ or importlib.util.find_spec("marimo") is not None:
+    try:
+        has_marimo = "MARIMO_ROOT" in os.environ or importlib.util.find_spec("marimo") is not None
+    except (ModuleNotFoundError, ValueError):
+        has_marimo = False
+    if has_marimo:
         # marimo is present; molab is the hosted flavour. Treat as molab only
         # when there is a GPU big enough to be the Blackwell box.
         if torch.cuda.is_available():
@@ -111,8 +115,11 @@ def detect_platform() -> str:
                     return "molab"
             except Exception:
                 pass
-    if importlib.util.find_spec("google.colab") is not None:
-        return "colab"
+    try:
+        if importlib.util.find_spec("google.colab") is not None:
+            return "colab"
+    except (ModuleNotFoundError, ValueError):
+        pass
     return "local"
 
 
@@ -277,7 +284,7 @@ MODEL_SPECS: dict[str, dict] = {
 @dataclass
 class Config:
     # ---------------------------------------------------------- identity --
-    RUN_NAME: str = "full1000"
+    RUN_NAME: str = "prod500"
     SEED: int = 20260813
     NOTES: str = "pre-registered run per PLAN.md v3"
 
@@ -317,7 +324,7 @@ class Config:
 
     # ------------------------------------------------- question budgets ---
     N_PILOT: int = 100                  # PLAN §3 pilot size
-    N_PER_CELL: int = 1000              # committed-cell size (PLAN §3 target 2000)
+    N_PER_CELL: int = 500               # committed-cell size (15,000 total items across 30 cells)
     N_AGREEMENT: int = 100              # H0 / Gate 2 subset (PLAN §4)
     N_MANUAL_CHECK: int = 50            # Gate 1 hand-verification sample size
     SPLIT_FRACTIONS: tuple[float, float, float] = (0.6, 0.2, 0.2)  # train/cal/test
@@ -482,8 +489,9 @@ CFG = replace(
     _BASE_CFG,
     RUN_NAME="smoke", N_PILOT=5, N_PER_CELL=5, N_AGREEMENT=5, N_MANUAL_CHECK=5,
     N_SAMPLES=3, N_BOOTSTRAP=200,
-    ONLY_MODELS=("qwen2.5-0.5b-instruct", "qwen2.5-1.5b-instruct"),
+    ONLY_MODELS=("qwen2.5-0.5b-instruct",),
     COMMIT_CELLS_OUTSIDE_BAND=True,
+    USE_NLI_FALLBACK=False,
 ) if SMOKE else _BASE_CFG
 
 # --------------------------------------------------------------------------
@@ -2442,34 +2450,7 @@ def stage_grade(bank: dict, cfg: Config, nli: "NLIGrader | None") -> pd.DataFram
     return df
 
 
-def math_equal(a: str, b: str) -> bool:
-    """Symbolic/numeric equivalence between two MODEL answers.
-
-    Reuses `grade_latex`, the same oracle the grader uses against gold, so an
-    answer pair that would both be marked correct can never land in two
-    different semantic clusters. Checked in both directions because
-    `grade_latex`'s normalise-and-contain fallbacks are not symmetric.
-
-    AUDIT finding 3: NLI merging was gated on answer_form in {short, entity},
-    so all nine committed GSM8K/MATH cells clustered by exact string alone —
-    "0.5", "1/2" and "\\frac{1}{2}" counted as three distinct beliefs and
-    inflated the entropy of a model that never wavered.
-    """
-    if not a or not b:
-        return False
-    try:
-        if grade_latex(a, [b]) or grade_latex(b, [a]):
-            return True
-    except Exception:                                    # noqa: BLE001
-        pass
-    # `grade_latex`'s no-math_verify fallback cannot evaluate \frac{a}{b}: it
-    # strips the macro and hands sympy "(1)(2)", which raises. Without this
-    # guard, clustering quality would depend on whether an optional package
-    # happened to install — so evaluate both sides numerically as a last resort.
-    return _numeric_equal(a, b)
-
-
-def _numeric_equal(a: str, b: str, tol: float = 1e-9) -> bool:
+def numeric_equal(a: str, b: str, tol: float = 1e-9) -> bool:
     """Both sides reduced to a FINITE real number, if they reduce at all.
 
     Absolute tolerance, deliberately. A relative tolerance merges answers that
@@ -2503,7 +2484,38 @@ def _numeric_equal(a: str, b: str, tol: float = 1e-9) -> bool:
     return abs(va - vb) <= tol
 
 
-def _union_find_merge(keys: list[int], should_merge: Callable[[int, int], bool]) -> dict[int, int]:
+def _numeric_equal(a: str, b: str, tol: float = 1e-9) -> bool:
+    return numeric_equal(a, b, tol=tol)
+
+
+def math_equal(a: str, b: str) -> bool:
+    """Symbolic/numeric equivalence between two MODEL answers.
+
+    Reuses `grade_latex`, the same oracle the grader uses against gold, so an
+    answer pair that would both be marked correct can never land in two
+    different semantic clusters. Checked in both directions because
+    `grade_latex`'s normalise-and-contain fallbacks are not symmetric.
+
+    AUDIT finding 3: NLI merging was gated on answer_form in {short, entity},
+    so all nine committed GSM8K/MATH cells clustered by exact string alone —
+    "0.5", "1/2" and "\\frac{1}{2}" counted as three distinct beliefs and
+    inflated the entropy of a model that never wavered.
+    """
+    if not a or not b:
+        return False
+    try:
+        if grade_latex(a, [b]) or grade_latex(b, [a]):
+            return True
+    except Exception:                                    # noqa: BLE001
+        pass
+    # `grade_latex`'s no-math_verify fallback cannot evaluate \frac{a}{b}: it
+    # strips the macro and hands sympy "(1)(2)", which raises. Without this
+    # guard, clustering quality would depend on whether an optional package
+    # happened to install — so evaluate both sides numerically as a last resort.
+    return numeric_equal(a, b)
+
+
+def union_find_merge(keys: list[int], should_merge: Callable[[int, int], bool]) -> dict[int, int]:
     """Merge cluster keys pairwise under `should_merge`; returns key -> root."""
     parent = {k: k for k in keys}
 
@@ -2519,6 +2531,10 @@ def _union_find_merge(keys: list[int], should_merge: Callable[[int, int], bool])
             if find(a) != find(b) and should_merge(a, b):
                 parent[find(a)] = find(b)
     return {k: find(k) for k in keys}
+
+
+def _union_find_merge(keys: list[int], should_merge: Callable[[int, int], bool]) -> dict[int, int]:
+    return union_find_merge(keys, should_merge)
 
 
 def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
@@ -2551,7 +2567,7 @@ def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
 
     # --- symbolic equivalence (GSM8K / MATH), BEFORE the NLI pass ----------
     if answer_form in ("latex", "numeric") and len(keys) >= 2:
-        remap = _union_find_merge(keys, lambda a, b: math_equal(originals[a], originals[b]))
+        remap = union_find_merge(keys, lambda a, b: math_equal(originals[a], originals[b]))
         labels = relabel(remap, labels)
         originals = {}
         for a, l in zip(answers, labels):
@@ -2596,7 +2612,7 @@ def cluster_answers(answers: list[str], answer_form: str, cfg: Config,
                     n_merges=len(extra), pairs=extra[:10],
                     note="these answers are NOT equal under the symbolic oracle; "
                          "set USE_NLI_FALLBACK=False to disable")
-    remap = _union_find_merge(
+    remap = union_find_merge(
         keys, lambda a, b: verdict.get((a, b), False) or verdict.get((b, a), False))
     return relabel(remap, labels)
 
@@ -4758,7 +4774,7 @@ class JudgeConfig:
     FREE_AFTER: bool = True
 
 
-JUDGE = JudgeConfig(ENABLED=True)
+JUDGE = JudgeConfig(ENABLED=False)
 
 JUDGE_PROMPT = (
     "You are grading one short answer against a reference answer. "
@@ -5048,9 +5064,8 @@ CMAP_DIV = LinearSegmentedColormap.from_list("div_br", DIVERGING)
 # Fixed slot per tier so a filtered chart never repaints the survivors.
 TIER_COLOR = {t: PALETTE[i] for i, t in enumerate(TIER_SPECS)}
 SIGNAL_COLOR = {"verbal": PALETTE[0], "behavioral": PALETTE[1], "internal": PALETTE[2]}
-# Keyed by the legacy storage names; rendered via `quadrant_label()`.
 QUADRANT_COLOR = {"hopeful": PALETTE[0], "suppressed": PALETTE[1],
-                  "agree_high": "#c9c8c2", "agree_low": "#e6e5e1"}
+                  "agree_high": "#334155", "agree_low": "#94a3b8"}
 
 
 def apply_style(cfg: Config) -> None:
@@ -5081,13 +5096,13 @@ def save_fig(fig, name: str, cfg: Config, caption: str = "") -> list[Path]:
     return paths
 
 
-def reliability_curve(p: np.ndarray, y: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def reliability_curve(p: np.ndarray, y: np.ndarray, bins: int, min_n: int = 10) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     edges = np.linspace(0, 1, bins + 1)
     idx = np.clip(np.digitize(p, edges[1:-1]), 0, bins - 1)
     xs, ys, ns = [], [], []
     for b in range(bins):
         m = idx == b
-        if m.sum() < 3:
+        if m.sum() < min_n:
             continue
         xs.append(p[m].mean())
         ys.append(y[m].mean())
@@ -5128,26 +5143,33 @@ def fig1_calibration(signals: pd.DataFrame, h1: dict, cfg: Config) -> None:
                 label=f"{sig} (ECE {h1.get('pooled', {}).get(sig, {}).get('ece', float('nan')):.3f})")
     ax.set(xlabel="stated / predicted confidence", ylabel="observed P(correct)",
            xlim=(0, 1), ylim=(0, 1), title="Calibration by signal (test split)")
-    ax.legend(loc="upper left")
+    ax.legend(loc="upper left", bbox_to_anchor=(0.02, 0.98), fontsize=7.2,
+              borderpad=0.3, labelspacing=0.25, handlelength=1.4, framealpha=0.92)
 
     ax2 = axes[1]
     comps, labels = ["reliability", "resolution"], []
     width = 0.36
+    max_val = 0.0
     for k, sig in enumerate(SIGNALS):
         v = h1.get("pooled", {}).get(sig, {})
         if "reliability" not in v:
             continue
         labels.append(sig)
         for j, comp in enumerate(comps):
-            ax2.bar(len(labels) - 1 + (j - 0.5) * width, v.get(comp, np.nan), width * 0.92,
+            val = v.get(comp, np.nan)
+            if np.isfinite(val):
+                max_val = max(max_val, val)
+            ax2.bar(len(labels) - 1 + (j - 0.5) * width, val, width * 0.92,
                     color=SIGNAL_COLOR[sig], alpha=1.0 if j == 0 else 0.45,
                     edgecolor=SURFACE, linewidth=1.2)
     ax2.set_xticks(range(len(labels)))
     ax2.set_xticklabels(labels)
+    if max_val > 0:
+        ax2.set_ylim(0, max_val * 1.25)
     ax2.set(ylabel="Brier component", title="Murphy decomposition")
     ax2.legend(handles=[Line2D([], [], color=INK3, lw=6, alpha=1.0, label="reliability (lower better)"),
                         Line2D([], [], color=INK3, lw=6, alpha=0.45, label="resolution (higher better)")],
-              loc="upper right")
+              loc="upper right", fontsize=7.2, borderpad=0.3, labelspacing=0.25, framealpha=0.92)
     fig.tight_layout()
     save_fig(fig, "fig1_calibration", cfg,
              "Figure 1 — calibration curves per signal, test split. Predicted under H1: the "
@@ -5166,23 +5188,26 @@ def fig2_quadrant(cfg: Config, abst: dict) -> None:
                              gridspec_kw={"width_ratios": [1.35, 1]})
     ax = axes[0]
     thr = cfg.QUADRANT_THRESHOLD
-    ax.axvline(thr, color=GRID, lw=1.0, zorder=1)
-    ax.axhline(thr, color=GRID, lw=1.0, zorder=1)
+    ax.axvline(thr, color="#64748b", ls="--", lw=1.2, zorder=1)
+    ax.axhline(thr, color="#64748b", ls="--", lw=1.2, zorder=1)
+    for spine in ["bottom", "left"]:
+        ax.spines[spine].set_color("#64748b")
+        ax.spines[spine].set_linewidth(1.0)
     for name in ("agree_low", "agree_high", "suppressed", "hopeful"):   # mismatches drawn on top
         s = q[q.quadrant == name]
         if not len(s):
             continue
-        ax.scatter(s["verbal_cal"], s["other_cal"], s=13, color=QUADRANT_COLOR[name],
-                   edgecolors=SURFACE, linewidths=0.5, alpha=0.85, zorder=3 if "agree" not in name else 2,
+        ax.scatter(s["verbal_cal"], s["other_cal"], s=16, color=QUADRANT_COLOR[name],
+                   edgecolors=SURFACE, linewidths=0.4, alpha=0.85, zorder=3 if "agree" not in name else 2,
                    label=f"{quadrant_label(name)} (n={len(s)})")
     ax.set(xlabel="calibrated verbalized confidence", ylabel="calibrated behavioral / internal",
            xlim=(-0.02, 1.02), ylim=(-0.02, 1.02), title="Signal mismatch quadrants (test split)")
-    ax.legend(loc="lower right", markerscale=1.4)
+    ax.legend(loc="lower right", markerscale=1.3, fontsize=7.6, framealpha=0.92, edgecolor="#cbd5e1")
 
     ax2 = axes[1]
     cats = ["justified_hedge", "missed_knowledge", "unresolved"]
     vals = [abst.get("by_category", {}).get(c, 0) for c in cats]
-    ax2.barh(range(len(cats)), vals, color=[PALETTE[2], PALETTE[1], "#c9c8c2"],
+    ax2.barh(range(len(cats)), vals, color=[PALETTE[2], PALETTE[1], "#cbd5e1"],
              edgecolor=SURFACE, linewidth=1.4, height=0.62)
     for i, v in enumerate(vals):
         ax2.text(v, i, f" {v}", va="center", ha="left", color=INK2, fontsize=7.8)
@@ -5190,6 +5215,9 @@ def fig2_quadrant(cfg: Config, abst: dict) -> None:
     ax2.set_yticklabels([c.replace("_", " ") for c in cats])
     ax2.set(xlabel="Format C passes", title="Abstention split (PLAN §4.1)")
     ax2.grid(axis="y", visible=False)
+    for spine in ["bottom", "left"]:
+        ax2.spines[spine].set_color("#64748b")
+        ax2.spines[spine].set_linewidth(1.0)
     fig.tight_layout()
     save_fig(fig, "fig2_quadrant", cfg,
              "Figure 2 — epistemic-alignment quadrants: calibrated verbalized confidence vs "
@@ -5291,8 +5319,8 @@ def fig4_depth_curves(sweep: pd.DataFrame, cfg: Config) -> None:
 
 
 def fig5_accuracy_grid(commitments: dict, cfg: Config) -> None:
-    """Supplementary — the ragged grid made visible: pilot accuracy per cell
-    with the 25–80% commitment band marked."""
+    """Supplementary — pilot accuracy per cell across the full 30-cell grid,
+    with out-of-band covariates (outside 25–80% target band) marked with dotted borders."""
     apply_style(cfg)
     if not commitments:
         return
@@ -5309,25 +5337,27 @@ def fig5_accuracy_grid(commitments: dict, cfg: Config) -> None:
                 ax.text(j, i, "—", ha="center", va="center", color=INK3, fontsize=8)
                 continue
             cid = cell_id(models[i], tiers[j])
-            ok = commitments.get(cid, {}).get("committed", False)
+            v = commitments.get(cid, {})
+            in_band = v.get("in_band", False) if "in_band" in v else (cfg.ACCURACY_BAND[0] <= M[i, j] <= cfg.ACCURACY_BAND[1])
             ax.text(j, i, f"{M[i, j]:.2f}", ha="center", va="center", fontsize=7.4,
                     color=SURFACE if M[i, j] > 0.55 else INK,
-                    fontweight="bold" if ok else "normal")
-            if not ok:
-                ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
-                                           edgecolor=PALETTE[7], lw=1.6, ls=":"))
+                    fontweight="bold" if in_band else "normal")
+            if not in_band:
+                ax.add_patch(plt.Rectangle((j - 0.47, i - 0.47), 0.94, 0.94, fill=False,
+                                           edgecolor=PALETTE[7], lw=1.5, ls=":"))
     ax.set_xticks(range(len(tiers)))
     ax.set_xticklabels([f"{t}\n{TIER_SPECS[t]['family'][:4]}" for t in tiers])
     ax.set_yticks(range(len(models)))
     ax.set_yticklabels([m.replace("qwen2.5-", "") for m in models])
-    ax.set_title(f"Pilot accuracy per cell (bold = committed; dotted = outside "
-                 f"{cfg.ACCURACY_BAND[0]:.0%}–{cfg.ACCURACY_BAND[1]:.0%} band)")
+    ax.set_title(f"Pilot accuracy per cell (bold = in {cfg.ACCURACY_BAND[0]:.0%}–{cfg.ACCURACY_BAND[1]:.0%} target band; "
+                 f"dotted = out-of-band covariate)")
     ax.grid(visible=False)
     fig.colorbar(im, ax=ax, label="pilot accuracy", fraction=0.035, pad=0.02)
     fig.tight_layout()
     save_fig(fig, "fig5_cell_commitment_grid", cfg,
-             "Supplementary — pilot accuracy per (model × tier) cell. A ragged grid is the "
-             "planned outcome (PLAN §3, §10), not a failure.")
+             "Supplementary — pilot accuracy per (model × tier) cell. All 30 cells are committed "
+             "to enable full-grid hierarchical modeling; dotted outlines indicate cells outside "
+             f"the {cfg.ACCURACY_BAND[0]:.0%}–{cfg.ACCURACY_BAND[1]:.0%} band which are controlled statistically as covariates.")
 
 
 def fig6_correlations(corr: pd.DataFrame, cfg: Config) -> None:

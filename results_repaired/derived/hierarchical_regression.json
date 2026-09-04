@@ -1,0 +1,153 @@
+{
+ "available": true,
+ "n": 1199,
+ "formula": "correct ~ verbal_cal + behavioral_cal + is_reasoning + log_params + is_long + has_number + has_multi_entity + has_year + behavioral_cal_missing",
+ "fixed_effects": [
+  "verbal_cal",
+  "behavioral_cal",
+  "is_reasoning",
+  "log_params",
+  "is_long",
+  "has_number",
+  "has_multi_entity",
+  "has_year",
+  "behavioral_cal_missing"
+ ],
+ "imputed_counts": {
+  "behavioral_cal": 2,
+  "internal_cal": 1199
+ },
+ "missingness_indicators": [
+  "behavioral_cal_missing"
+ ],
+ "signals_dropped_all_missing": [
+  "internal_cal"
+ ],
+ "signals_near_all_missing": {},
+ "terms_dropped_degenerate": {},
+ "random_intercepts_requested": [
+  "question",
+  "model",
+  "tier",
+  "model_x_tier"
+ ],
+ "random_intercepts_fitted": [
+  "model",
+  "model_x_tier",
+  "question",
+  "tier"
+ ],
+ "n_questions": 800,
+ "n_cells": 6,
+ "per_cell": {
+  "qwen2.5-3b-instruct__C1": {
+   "n": 200,
+   "error": "Singular matrix"
+  },
+  "qwen2.5-3b-instruct__C2": {
+   "n": 200,
+   "params": {
+    "Intercept": 14.598129403157161,
+    "verbal_cal": -48.36764907548254,
+    "behavioral_cal": 5.713901619456388,
+    "is_long": -0.1788489172442704,
+    "has_number": 0.6137586223688417,
+    "has_multi_entity": -0.5409172998566711,
+    "has_year": -0.00878664618323902
+   },
+   "pvalues": {
+    "Intercept": 0.6790264334665841,
+    "verbal_cal": 0.608366405546796,
+    "behavioral_cal": 5.4538487910872284e-11,
+    "is_long": 0.6627132714311506,
+    "has_number": 0.47874678085084366,
+    "has_multi_entity": 0.28913165355082204,
+    "has_year": 0.9942240604952992
+   }
+  },
+  "qwen2.5-3b-instruct__R1": {
+   "n": 200,
+   "error": "Singular matrix"
+  },
+  "qwen2.5-7b-instruct__C2": {
+   "n": 200,
+   "params": {
+    "Intercept": -1.2581769641555944,
+    "verbal_cal": -6.079047613959936,
+    "behavioral_cal": 8.210490851303138,
+    "is_long": 0.1478021486685485,
+    "has_number": 0.07635737877959027,
+    "has_multi_entity": -0.33656985222012614,
+    "has_year": -0.43177197917749277
+   },
+   "pvalues": {
+    "Intercept": 0.8283849571650821,
+    "verbal_cal": 0.5818777172225318,
+    "behavioral_cal": 6.009335658236279e-11,
+    "is_long": 0.7108286469217898,
+    "has_number": 0.9237517770256298,
+    "has_multi_entity": 0.4617136020638921,
+    "has_year": 0.6680387933002697
+   }
+  },
+  "qwen2.5-7b-instruct__C3": {
+   "n": 200,
+   "params": {
+    "Intercept": -8.453524849112998,
+    "verbal_cal": 27.16685988035186,
+    "behavioral_cal": 5.356205257307212,
+    "is_long": -0.016047254827128096,
+    "has_number": 0.1252898368523161,
+    "has_multi_entity": 0.2707723537861355,
+    "has_year": -0.9001002972067759
+   },
+   "pvalues": {
+    "Intercept": 0.5185365223169005,
+    "verbal_cal": 0.681413474992153,
+    "behavioral_cal": 5.088282931292251e-08,
+    "is_long": 0.976851024157205,
+    "has_number": 0.8805825910320912,
+    "has_multi_entity": 0.5596279274153841,
+    "has_year": 0.4344424440538397
+   }
+  },
+  "qwen2.5-7b-instruct__R1": {
+   "n": 199,
+   "error": "Singular matrix"
+  }
+ },
+ "method": "bayes_mixed_glm",
+ "converged": true,
+ "fit_warnings": [],
+ "random_intercepts_dropped": [],
+ "params": {
+  "Intercept": -4.102174157324825,
+  "verbal_cal": 1.5443757692223221,
+  "behavioral_cal": 7.061762325514678,
+  "is_reasoning": 0.01174619598312504,
+  "log_params": -0.039435423209092886,
+  "is_long": -0.08904726647167875,
+  "has_number": -0.059310276687204226,
+  "has_multi_entity": -0.23501693467545015,
+  "has_year": -0.9124295248666464,
+  "behavioral_cal_missing": -1.3270390274582406
+ },
+ "sd": {
+  "Intercept": 0.08693324086767248,
+  "verbal_cal": 0.1994798869944426,
+  "behavioral_cal": 0.1616400628359038,
+  "is_reasoning": 0.10335297453589788,
+  "log_params": 0.052664410423270906,
+  "is_long": 0.12218471466832564,
+  "has_number": 0.10519446381351011,
+  "has_multi_entity": 0.12560032810294863,
+  "has_year": 0.5822323329970002,
+  "behavioral_cal_missing": 1.539145702218654
+ },
+ "vc_sd": {
+  "question": 0.5352520796667647,
+  "model": -1.1842763553179538,
+  "tier": -1.6408873275534672,
+  "model_x_tier": -1.7187315752577224
+ }
+}

@@ -173,12 +173,15 @@ comes from within-dataset gradients (PopQA popularity, MATH level), so domain,
 format, and grader stay held constant across the retrieval→reasoning move.
 
 **Per-cell pipeline:**
-- **Pilot 100 questions per cell first.** Keep only cells landing in the
-  25–80% accuracy band before committing to the full target (the §8
-  difficulty-definition rule).
-- **Full target: ~2000 questions per cell** for cells that clear the pilot —
-  a ceiling, not a blind per-cell default. A ragged grid (some cells
-  excluded) is an acceptable, reportable outcome.
+- **Pilot 100 questions per cell first.** Records baseline pilot accuracy
+  covariates. Under the post-audit design, `COMMIT_CELLS_OUTSIDE_BAND = True`
+  commits all cells rather than deleting out-of-band cells (which previously dropped
+  R2, R3, and 0.5B); difficulty is controlled statistically via multi-level GLMM random
+  intercepts and within-tier difficulty matching (§8.4).
+- **Target sample size:** $N=500$ questions per cell ($N=15,000$ total items across the 30 cells:
+  9,000 train / 3,000 cal / 3,000 test), providing strong statistical power for the GLMM and
+  within-tier matching while running in ~3.8 GPU-hours on Molab. Setting `COMMIT_CELLS_OUTSIDE_BAND = False`
+  restores the legacy ragged-grid deletion behavior if needed.
 - Split inside each cell: **60% train / 20% calibration / 20% test**.
 - **Sanity check before running the full pipeline:** hand-verify correctness
   on 50–100 questions per grader family. If automated grading disagrees with
@@ -243,6 +246,27 @@ necessarily identical to what the model "would have said" if answering had
 stayed optional — being compelled to answer can itself change the output.
 Report this as "accuracy under compulsion," not as ground truth about the
 original hedge.
+
+### 4.2 Elicitation sensitivity ablation at 1.5B (Coarse 0–10 scale & Logit readout)
+
+Before concluding that sub-3B models lack verbal confidence capability, test whether
+the continuous 0–100 prompt format is the binding constraint rather than the model's
+internal meta-cognition (`FINDINGS.md` §1.1).
+
+1. **Target cell:** Qwen2.5-1.5B-Instruct on R1 (PopQA High) and C1 (GSM8K).
+2. **Alternative readouts:**
+   - **Format A-Coarse:** Elicit confidence on a coarse 0–10 integer scale ("Rate your
+     certainty from 0 to 10") rather than 0–100%. Check if this avoids percentage
+     clustering at round numbers and produces non-degenerate spread across bins.
+   - **Logit-based readout (P(True)):** Read the normalized logit ratio of candidate
+     confidence tokens (e.g. logit mass for "Certain" vs "Unsure") directly from the
+     next-token distribution rather than relying on multi-token text generation.
+3. **Decision rule:**
+   - If 0–10 or logit readout produces $\ge 5$ distinct confidence values and non-trivial
+     correlation with correctness ($\rho \ge 0.25$), the verbal collapse at 1.5B is
+     classified as an elicitation artifact of the prompt.
+   - If degeneracy persists across both alternative readouts, the collapse is confirmed as
+     an intrinsic architectural capacity limit of sub-3B instruction-tuned models.
 
 ## 5. Signal 2 — Behavioral confidence (semantic entropy)
 
@@ -361,8 +385,11 @@ magnitudes.
              log(params):internal +     # does probe validity rise with scale?
              layer_pct:tier             # does signal-onset depth shift by task type?
    ```
-5. **Difficulty control:** difficulty is defined per-model via the 100-question
-   pilot (§3), keeping cells in the 25–80% accuracy band.
+5. **Difficulty control:** Post-audit, difficulty is controlled statistically
+   rather than by deleting cells. `COMMIT_CELLS_OUTSIDE_BAND = True` commits all
+   cells; the multi-level GLMM absorbs cell baselines via random intercepts for
+   model, tier, model × tier, and question, alongside `in_band` / `pilot_accuracy`
+   covariates and within-tier difficulty matching (`difficulty_matched.json`).
 6. **Verbal signal pre-flight:** exclude a cell from the verbal comparison if
    it produces fewer than ~3 distinct confidence values — exclusion, not
    reporting it as "poorly calibrated."
@@ -615,8 +642,8 @@ data — an estimator chosen after the curves are seen is not an estimator.
   asymptote higher. The depth curve (§6 · 7) is the direct visual test.
 - **Falsified if.** Depth curves for retrieval and reasoning overlap in onset
   percentile, or no percentile reaches AUROC ≥ 0.65 for reasoning at any
-  scale — with cells held in the 25–80% accuracy band (§8) to control for
-  accuracy.
+  scale — with difficulty controlled statistically via GLMM random intercepts and
+  within-tier matching rather than cell deletion.
 - **Why it matters.** The retrieval→reasoning gradient is the controlled
   manipulation that makes "hopeful confidence" machine-legible: if internal
   signal lives only in late layers for reasoning (or nowhere at small scale),
@@ -801,11 +828,12 @@ after each run and marked with a verdict.
 |---|---|---|---|---|
 | E0 | Dataset selection + grading sanity (§3) | manual vs automated agreement on 50–100 hand-verified questions | data quality | Gate 1 |
 | E1 | Format agreement (§4) | pairwise Spearman across formats A/B/C on the 50–100-question subset | H0 | Gate 2 |
-| E2 | Cell pilot + ladder main run (§3, §4–§8) | 100-question pilot keeps each cell in the 25–80% accuracy band; then all three signals over the surviving cells' train/cal/test split across the full ladder × model grid; per-cell Murphy decomposition + pooled hierarchical regression | H1, H2, H4 | — |
+| E2 | Cell pilot + ladder main run (§3, §4–§8) | 100-question pilot records accuracy covariates; all cells commit under COMMIT_CELLS_OUTSIDE_BAND=True; then all three signals over train/cal/test splits across the ladder × model grid; per-cell Murphy decomposition, within-tier difficulty matching + pooled hierarchical regression with cell random intercepts | H1, H2, H4 | — |
 | E3 | Forced-answer companion (§4.1) | forced-answer pass on every Format C Pass → justified-hedge vs missed-knowledge split | H2 | — |
 | E4 | Probe validity (§6) | 5-percentile sweep on the calibration split; finiteness pre-check; label-shuffle null; surface/embedding baseline; train AUROC | H2, H4 | Gate 3 |
 | E5 | Base-model elicitation check (§9) | Qwen2.5-7B-base usable output for formats A/B/C; document limitation if not | infra | Gate 4 |
 | E6 | Post-training comparison run (§9) | repeat E2/E3/E4 on 7B-base; hopeful-confidence and missed-knowledge deltas vs 7B-Instruct | H3 | Gate 4 |
+| E7 | Elicitation ablation at 1.5B (§4.2) | 0–10 coarse scale vs 0–100 prompt vs token-logit readout on R1 & C1 | verbal axis validity | Gate 2 fallback |
 
 ### 17.2 Run log (what actually ran)
 

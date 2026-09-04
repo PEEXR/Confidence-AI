@@ -1,0 +1,56 @@
+{
+ "tiers": {
+  "R1": "top_quintile",
+  "R2": "bottom_quintile",
+  "R3": "adversarial"
+ },
+ "available": false,
+ "per_model": {
+  "qwen2.5-1.5b-instruct": {
+   "R1": {
+    "n": 200,
+    "accuracy": 0.315,
+    "verbal_cal_mean": null,
+    "behavioral_cal_mean": 0.36379224200746324,
+    "internal_cal_mean": null,
+    "delta_verbal_behavioral_mean": null
+   }
+  },
+  "qwen2.5-3b-instruct": {
+   "R1": {
+    "n": 200,
+    "accuracy": 0.375,
+    "verbal_cal_mean": 0.38765401195939375,
+    "behavioral_cal_mean": 0.4063041943333316,
+    "internal_cal_mean": null,
+    "delta_verbal_behavioral_mean": -0.019034093306713466
+   }
+  },
+  "qwen2.5-7b-base": {
+   "R1": {
+    "n": 200,
+    "accuracy": 0.5,
+    "verbal_cal_mean": null,
+    "behavioral_cal_mean": 0.43625258445258447,
+    "internal_cal_mean": null,
+    "delta_verbal_behavioral_mean": null
+   }
+  },
+  "qwen2.5-7b-instruct": {
+   "R1": {
+    "n": 200,
+    "accuracy": 0.44,
+    "verbal_cal_mean": 0.42268203763917633,
+    "behavioral_cal_mean": 0.41829840682933433,
+    "internal_cal_mean": null,
+    "delta_verbal_behavioral_mean": 0.0029884212365109625
+   }
+  }
+ },
+ "contrasts": {},
+ "interpretation": "confidence_tracks_accuracy=False means calibrated verbalized confidence fell by less than half as much as accuracy did when popularity dropped \u2014 stated confidence is not tracking the difficulty manipulation.",
+ "tiers_covered": [
+  "R1"
+ ],
+ "coverage_warning": "only ['R1'] present; the popularity gradient needs R1 and R2, and the adversarial contrast needs R3"
+}

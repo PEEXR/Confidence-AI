@@ -1,7 +1,10 @@
 {
- "source": "/home/manan/Projects/2hand/Confidence-AI/results",
+ "source": "/home/peexr/Documents/Confidence-AI/results",
  "generated_by": "audit_docs/reanalyse.py",
  "internal_signal": "UNAVAILABLE - activation shards absent; probe/H4/Gate 3 not rebuilt",
  "entropy_weighting": "counts - no sequence log-probs in this run's artefacts",
- "h2_features": "UNAVAILABLE - no question text survives"
+ "h2_features": "AVAILABLE - question text recovered from HF datasets",
+ "hierarchical_regression": "COMPLETED - method=bayes_mixed_glm",
+ "difficulty_matched": "COMPLETED - tiers=4",
+ "popularity_contrast": "available=False"
 }

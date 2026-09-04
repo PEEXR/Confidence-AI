@@ -1,0 +1,1 @@
+Supplementary — pilot accuracy per (model × tier) cell. All 30 cells are committed to enable full-grid hierarchical modeling; dotted outlines indicate cells outside the 25%–80% target band which are controlled statistically as covariates rather than deleted.

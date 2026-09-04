@@ -201,9 +201,13 @@ compute.
 
 ## The grid
 
-**6 tiers × 5 model variants = 30 cells.** A cell is committed only after its
-pilot lands in the 25–80% accuracy band. A ragged grid is the *planned*
-outcome (PLAN §3, §10), not a failure — see `t2_cell_commitment.csv`.
+**6 tiers × 5 model variants = 30 cells.** Under the post-audit design,
+`COMMIT_CELLS_OUTSIDE_BAND = True` defaults to committing all cells. Rather than
+deleting cells outside the 25–80% pilot accuracy band (which previously eliminated all of
+R2, R3, and 0.5B), base-rate difficulty is controlled statistically via cell random
+intercepts in the multi-level GLMM (`in_band` / `pilot_accuracy` covariates) and
+within-tier difficulty matching — see `difficulty_matched.json` and
+`t2_cell_commitment.csv`.
 
 | Tier | Source | Family | Answer form | Grader |
 |---|---|---|---|---|

@@ -1,0 +1,233 @@
+{
+ "available": true,
+ "n_bins": 4,
+ "per_tier": {
+  "C1": {
+   "bins": {
+    "0": {
+     "n": 264,
+     "mean_item_difficulty": 0.16287878787878787,
+     "base_rate": 0.16287878787878787,
+     "signals": {
+      "verbal": {
+       "n": 66,
+       "auroc": 0.5556900726392252,
+       "ece": 0.36654534425235064,
+       "brier": 0.2302144244964296,
+       "resolution": 0.000607208448117539
+      },
+      "behavioral": {
+       "n": 254,
+       "auroc": 0.7139012939425169,
+       "ece": 0.18961534749358028,
+       "brier": 0.16860165707933786,
+       "resolution": 0.017904964610853856
+      }
+     }
+    },
+    "1": {
+     "n": 236,
+     "mean_item_difficulty": 0.5,
+     "base_rate": 0.5,
+     "signals": {
+      "verbal": {
+       "n": 59,
+       "auroc": 0.53992628992629,
+       "ece": 0.10825712126586576,
+       "brier": 0.24339198304064547,
+       "resolution": 0.002298734254350457
+      },
+      "behavioral": {
+       "n": 231,
+       "auroc": 0.7476386806596702,
+       "ece": 0.09990619333343678,
+       "brier": 0.20397347299299237,
+       "resolution": 0.05238155686113527
+      }
+     }
+    },
+    "2": {
+     "n": 208,
+     "mean_item_difficulty": 0.75,
+     "base_rate": 0.75,
+     "signals": {
+      "verbal": {
+       "n": 52,
+       "auroc": 0.6541019955654102,
+       "ece": 0.3111482466578007,
+       "brier": 0.2518080657772648,
+       "resolution": 0.015843326467153862
+      },
+      "behavioral": {
+       "n": 206,
+       "auroc": 0.7669205794205795,
+       "ece": 0.15367591427896218,
+       "brier": 0.18732026067981916,
+       "resolution": 0.03937935661125009
+      }
+     }
+    },
+    "3": {
+     "n": 92,
+     "mean_item_difficulty": 1.0,
+     "base_rate": 1.0,
+     "signals": {}
+    }
+   },
+   "n_models": 4,
+   "n_questions": 200
+  },
+  "C2": {
+   "bins": {
+    "0": {
+     "n": 360,
+     "mean_item_difficulty": 0.14722222222222223,
+     "base_rate": 0.14722222222222223,
+     "signals": {
+      "verbal": {
+       "n": 180,
+       "auroc": 0.7299916920520632,
+       "ece": 0.32972843888865,
+       "brier": 0.20775453594769147,
+       "resolution": 0.009380834086118641
+      },
+      "behavioral": {
+       "n": 338,
+       "auroc": 0.7385069444444444,
+       "ece": 0.2381117662090217,
+       "brier": 0.1823062714600765,
+       "resolution": 0.01493968870324774
+      }
+     }
+    },
+    "1": {
+     "n": 148,
+     "mean_item_difficulty": 0.5,
+     "base_rate": 0.5,
+     "signals": {
+      "verbal": {
+       "n": 74,
+       "auroc": 0.6477272727272726,
+       "ece": 0.060530742526247114,
+       "brier": 0.22858269203103285,
+       "resolution": 0.02337749297208757
+      },
+      "behavioral": {
+       "n": 142,
+       "auroc": 0.6955357142857143,
+       "ece": 0.12411116741387612,
+       "brier": 0.22262035767059818,
+       "resolution": 0.035804202275446395
+      }
+     }
+    },
+    "2": {
+     "n": 176,
+     "mean_item_difficulty": 0.75,
+     "base_rate": 0.75,
+     "signals": {
+      "verbal": {
+       "n": 88,
+       "auroc": 0.6792534722222222,
+       "ece": 0.36656557199588846,
+       "brier": 0.27177292144065557,
+       "resolution": 0.013083299737956057
+      },
+      "behavioral": {
+       "n": 168,
+       "auroc": 0.7426952892069171,
+       "ece": 0.19012254027591263,
+       "brier": 0.18938010651077805,
+       "resolution": 0.03059027332106847
+      }
+     }
+    },
+    "3": {
+     "n": 116,
+     "mean_item_difficulty": 1.0,
+     "base_rate": 1.0,
+     "signals": {}
+    }
+   },
+   "n_models": 4,
+   "n_questions": 200
+  },
+  "C3": {
+   "bins": {
+    "0": {
+     "n": 200,
+     "mean_item_difficulty": 0.19,
+     "base_rate": 0.19,
+     "signals": {
+      "verbal": {
+       "n": 200,
+       "auroc": 0.5151884340480832,
+       "ece": 0.006101080386794133,
+       "brier": 0.15389535898280937,
+       "resolution": 0.0
+      },
+      "behavioral": {
+       "n": 200,
+       "auroc": 0.7969460688758935,
+       "ece": 0.035245383111512193,
+       "brier": 0.1257766756880943,
+       "resolution": 0.030041000800847345
+      }
+     }
+    }
+   },
+   "n_models": 1,
+   "n_questions": 200
+  },
+  "R1": {
+   "bins": {
+    "0": {
+     "n": 424,
+     "mean_item_difficulty": 0.03773584905660377,
+     "base_rate": 0.03773584905660377,
+     "signals": {
+      "verbal": {
+       "n": 211,
+       "auroc": 0.4635922330097087,
+       "ece": 0.3470818908047909,
+       "brier": 0.1648357077328985,
+       "resolution": 4.990255802018431e-05
+      },
+      "behavioral": {
+       "n": 418,
+       "auroc": 0.7351523631840796,
+       "ece": 0.1886486136031703,
+       "brier": 0.11469977389935139,
+       "resolution": 0.001873687483600137
+      }
+     }
+    },
+    "1": {
+     "n": 376,
+     "mean_item_difficulty": 0.824468085106383,
+     "base_rate": 0.824468085106383,
+     "signals": {
+      "verbal": {
+       "n": 188,
+       "auroc": 0.7054852320675107,
+       "ece": 0.39675399509434073,
+       "brier": 0.2820633780517832,
+       "resolution": 0.008716081025008905
+      },
+      "behavioral": {
+       "n": 371,
+       "auroc": 0.858675227059192,
+       "ece": 0.2256588677054862,
+       "brier": 0.14982051694485063,
+       "resolution": 0.05155359354859319
+      }
+     }
+    }
+   },
+   "n_models": 4,
+   "n_questions": 200
+  }
+ },
+ "degenerate_tiers": {},
+ "note": "Difficulty is the cross-model correctness rate of the question within its tier, so bins are a property of the item. Comparing signals within a bin controls the base rate WITHOUT deleting any cell."
+}

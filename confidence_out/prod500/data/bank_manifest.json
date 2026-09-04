@@ -1,0 +1,57 @@
+{
+  "spec": {
+    "tiers": [
+      "R1",
+      "R2",
+      "R3",
+      "C1",
+      "C2",
+      "C3"
+    ],
+    "n_per_cell": 500,
+    "n_pilot": 100,
+    "seed": 20260813,
+    "splits": [
+      0.6,
+      0.2,
+      0.2
+    ]
+  },
+  "provenance": {
+    "run_name": "prod500",
+    "config_hash": "b11fe302abde",
+    "seed": 20260813,
+    "code_sha": "UNBOUND-nogit",
+    "platform": "molab",
+    "devices": {
+      "cuda": true,
+      "n_gpu": 1,
+      "gpus": [
+        {
+          "index": 0,
+          "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+          "vram_gb": 101.98,
+          "capability": "12.0"
+        }
+      ],
+      "total_vram_gb": 101.98,
+      "max_vram_gb": 101.98,
+      "bf16": true,
+      "torch": "2.11.0+cu130",
+      "python": "3.13.11"
+    },
+    "dtype": "torch.bfloat16",
+    "started_utc": "2026-09-03T16:07:50+00:00",
+    "transformers": "5.14.1",
+    "torch": "2.11.0+cu130",
+    "math_verify": true
+  },
+  "counts": {
+    "R1": 500,
+    "R2": 500,
+    "R3": 500,
+    "C1": 500,
+    "C2": 500,
+    "C3": 500
+  }
+}
