@@ -1,0 +1,6 @@
+{
+  "qwen2.5-0.5b-instruct__C1": "clean activations, no signal",
+  "qwen2.5-0.5b-instruct__R3": "clean activations, no signal",
+  "qwen2.5-3b-instruct__R1": "clean activations, no signal",
+  "qwen2.5-7b-base__C3": "p0 negative control FAILED — the tap is not reading a constant prompt-ending token (see AUDIT finding 1)"
+}

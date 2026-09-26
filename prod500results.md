@@ -211,24 +211,26 @@ When given the option to bet (Format C: `ANSWER` vs. `PASS`), the pipeline force
 
 ```
         Factual Retrieval (R1/R2/R3)                  Multi-Step Reasoning (C1/C2/C3)
-1.0 ┌               ┌────────────────           1.0 ┌
-    │       ┌───────┘                               │                       ┌───────
-0.8 │   ┌───┘                                   0.8 │               ┌───────┘
-    ├───┼──────────────────────── Gate 3 (0.65) ├───┼───────────────┼──────── Gate 3 (0.65)
-0.6 │   │                                       0.6 │       ┌───────┘
-    │   │                                           │   ┌───┘
-0.5 ├───┴──────────────────────── Chance (0.50) 0.5 ├───┴──────────────────── Chance (0.50)
-   0%  25%   50%   75%  100%                       0%  25%   50%   75%  100%
+1.0 ┌       ┌───────────────────────────        1.0 ┌
+    │   ┌───┘                                       │                       ┌───────
+0.8 │ ┌─┘                                       0.8 │               ┌───────┘
+    ├─┼──────────────────────── Gate 3 (0.65)   ├───┼───────────────┼──────── Gate 3 (0.65)
+0.6 │ │                                         0.6 │       ┌───────┘
+    │ │                                             │   ┌───┘
+0.5 ├─┴──────────────────────── Chance (0.50)   0.5 ├───┴──────────────────── Chance (0.50)
+   0%  20%   40%   60%   80%  100%                 0%  20%   40%   60%   80%  100%
              Layer Depth                                     Layer Depth
-         [ Onset at 27.3% ]                              [ Onset at 40.9% ]
+         [ Onset at 6.82% ]                              [ Onset at 28.08% ]
 ```
 
-#### Why Does Reasoning Onset Later Than Retrieval?
-1. **Factual Retrieval Linearizes Early (Mean Onset = 27.3%):** Factual lookups depend on key-value associative recalls in transformer MLP layers. The entity's factual correctness is crystallized in early feedforward transformations and accumulates monotonically, reaching peak AUROCs of **$0.92\text{--}0.94$** at late layers.
-2. **Multi-Step Reasoning Requires Serial Computation (Mean Onset = 40.9%):** A model cannot know whether a multi-step mathematical derivation will succeed until intermediate variable bindings and operator chains are executed across earlier attention layers. The signal linearizes **$+13.6\%$ deeper in the network**.
-3. **The Base Model Failure on Reasoning:** While `7B-base` achieves $0.935$ AUROC on retrieval (R2), it fails Gate 3 on complex reasoning ($p_0$ failure on C3, AUROC $0.50$ on early C1). Instruction tuning is required to structure multi-step reasoning into a linearly decodable subspace.
+#### Why Does Reasoning Onset Later Than Retrieval? (5% Fine Sweep vs. 25-pp Baseline)
+1. **Factual Retrieval Linearizes Immediately (Fine Onset = 6.82%):** On the 21-point fine sweep (`prod500_5pct`), 9 of 11 evaluated retrieval cells cross the $\ge 0.65$ gate with 2-consecutive confirmation at **layer depth 5.0%** (mean $6.82\%$). Factual lookups depend on immediate key-value associative retrieval in initial MLP layers. What looked like a $27.3\%$ onset on the coarse grid was an artifact of having no taps between $0\%$ and $25\%$.
+2. **Multi-Step Reasoning Requires Serial Computation (Fine Onset = 28.08%):** A model cannot know whether a multi-step mathematical derivation will succeed until intermediate variable bindings and operator chains are executed across earlier attention layers. The signal linearizes at a mean depth of **$28.08\%$**, creating a clean **$\Delta = +21.26\%$ depth gap** ($95\%$ bootstrap CI: $[+9.72\%, +33.05\%]$).
+3. **Statistical Significance Confirmed ($p = 0.0039$):** While the coarse grid was borderline ($p = 0.053$), the 21-tap continuous resolution under the 2-consecutive rule achieves **$p = 0.0039$** on 20,000 permutations. Even excluding GSM8K ($C_1$), the reasoning onset remains $+12.63\%$ deeper (`derived/h4_depth.json:c1_sensitivity`).
+4. **Gate 3 Resolution (24 of 28 Passed):** The fine sweep rescued 2 cells (`1.5b__C1` and `3b__C1`, both peaking at layer 60% with AUROCs of $0.716$ and $0.676$). Only 4 cells fail Gate 3 (3 clean with no signal: `0.5b__C1`, `0.5b__R3`, `3b__R1`; and 1 failing the $p_0$ negative control: `7b-base__C3`).
 
 ---
+
 
 ### Figure 5 — Task Accuracy & Covariate Difficulty Grid (Supplementary)
 

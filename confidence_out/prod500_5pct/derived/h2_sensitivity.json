@@ -1,0 +1,47 @@
+{
+  "description": "Exploratory continuous delta metric (Verbal - Behavioral) distributions and regressions for H2",
+  "status": "committed_sensitivity_artifact",
+  "definition": "delta = verbal_cal - behavioral_cal on complete-case rows (N=831 across 9 cells)",
+  "distribution": {
+    "mean": -0.0061,
+    "median": -0.0004,
+    "std": 0.1142,
+    "p05": -0.1741,
+    "p95": 0.1966
+  },
+  "verbal_cal_depression": {
+    "cells_max_below_05": 8,
+    "total_cells": 9,
+    "note": "In 8 of 9 cells carrying all three signals, maximum calibrated verbal confidence never reaches 0.50"
+  },
+  "ols_regressions_pooled": {
+    "is_long": {
+      "beta": 0.007,
+      "p": 0.37,
+      "se": 0.008
+    },
+    "has_year": {
+      "beta": 0.007,
+      "p": 0.65,
+      "se": 0.017,
+      "note": "classical OLS SE yields p=0.65; robust HC1 yields p=0.43 (both non-significant)"
+    },
+    "has_number": {
+      "beta": 0.001,
+      "p": 0.917,
+      "se": 0.008
+    },
+    "has_multi_entity": {
+      "beta": 0.005,
+      "p": 0.545,
+      "se": 0.008
+    }
+  },
+  "cell_fixed_effects_pvalues": {
+    "note": "Cell-FE p-values exceed 0.50 under all specifications (p > 0.50)",
+    "is_long": 0.642,
+    "has_year": 0.829,
+    "has_number": 0.919,
+    "has_multi_entity": 0.767
+  }
+}

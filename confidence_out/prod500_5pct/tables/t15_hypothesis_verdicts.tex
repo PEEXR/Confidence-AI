@@ -1,0 +1,15 @@
+\begin{table}
+\caption{Pre-registered hypothesis verdicts.}
+\label{tab:t15_hypothesis_verdicts}
+\begin{tabular}{llll}
+\toprule
+hypothesis & gate & passed & verdict \\
+\midrule
+H0 & Gate 2 & False & H0 falsified — report all three formats separately (PLAN §16 Gate 2 fallback) \\
+H1 & — & False & H1 falsified — CIs overlap, no ordering distinguishable \\
+H2 & Gate 1 & False & H2 not supported - failing conjunct(s): replicates\_across\_cells. Reported as a DESCRIPTIVE result: confidence disagreement is heterogeneous across model x tier cells, and the features that survive pooling are tier proxies rather than question characteristics. \\
+H3 & Gate 4 & NaN & H3 untested — only 0/0 matched rows have BOTH a verbal and a behavioral/internal value. The pre-repair code would have reported a rate of 0.0 here rather than declining to test. \\
+H4 & Gate 3 & True & H4 supported — internal signal onsets later for reasoning than retrieval \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,12 @@
+answer_form,grader,n
+entity,alias_exact,58918
+entity,nli,2
+entity,no_answer,13217
+latex,no_answer,10491
+latex,symbolic,61206
+numeric,no_answer,3336
+numeric,numeric,32281
+numeric,string_fallback,309
+short,alias_exact,1174
+short,nli,32779
+short,no_answer,2130

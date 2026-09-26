@@ -1,0 +1,664 @@
+{
+  "canonical_format": "Bfix",
+  "format_ece": {
+    "A": 0.6724210164835165,
+    "B": 2.6002289340979247e-17,
+    "Bfix": 0.5583362098722817,
+    "C": 0.47215592680986485
+  },
+  "format_stats": {
+    "A": {
+      "n": 2912,
+      "n_distinct": 18,
+      "ece": 0.6724210164835165,
+      "brier": 0.6590107486263735,
+      "label_free": true,
+      "role": "candidate",
+      "eligible": true
+    },
+    "B": {
+      "n": 2897,
+      "n_distinct": 45,
+      "ece": 2.6002289340979247e-17,
+      "brier": 0.1528829638295524,
+      "label_free": false,
+      "role": "supervised_reference",
+      "eligible": false
+    },
+    "Bfix": {
+      "n": 2897,
+      "n_distinct": 5,
+      "ece": 0.5583362098722817,
+      "brier": 0.5363548498446669,
+      "label_free": true,
+      "role": "candidate",
+      "eligible": true
+    },
+    "C": {
+      "n": 2514,
+      "n_distinct": 2,
+      "ece": 0.47215592680986485,
+      "brier": 0.381066030230708,
+      "label_free": true,
+      "role": "candidate",
+      "eligible": false
+    }
+  },
+  "cells": {
+    "qwen2.5-0.5b-instruct__C1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 27,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__C2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 24,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__C3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 16,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__R1": {
+      "verbal": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 0,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__R2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 1,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-0.5b-instruct__R3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 74,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__C1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 89,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__C2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 57,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__C3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 1,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 42,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__R1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 1,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 69,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__R2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 82,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-1.5b-instruct__R3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 97,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__C1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 81,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__C2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 58,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__C3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 75,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__R1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 4,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 64,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__R2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 4,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 90,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-3b-instruct__R3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 94,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__C1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 96,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__C2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 1,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 55,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__C3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 80,
+        "excluded": false
+      },
+      "internal": {
+        "method": "identity",
+        "n_cal": 100,
+        "n_distinct": 0,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__R1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 66,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__R2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 91,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-base__R3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__C1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 2,
+        "excluded": true
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 66,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__C2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 46,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__C3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 78,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__R1": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 56,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__R2": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 3,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 78,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    },
+    "qwen2.5-7b-instruct__R3": {
+      "verbal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 4,
+        "excluded": false
+      },
+      "behavioral": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 91,
+        "excluded": false
+      },
+      "internal": {
+        "method": "platt",
+        "n_cal": 100,
+        "n_distinct": 100,
+        "excluded": false
+      }
+    }
+  },
+  "label_free_formats": [
+    "A",
+    "Bfix",
+    "C"
+  ],
+  "ground_truth_variant": "EXTRACT",
+  "accuracy_by_variant": {
+    "A": 0.2819333333333333,
+    "B": 0.27193333333333336,
+    "C": 0.1868,
+    "EXTRACT": 0.265,
+    "FORCED": 0.24747561184323122,
+    "SAMPLE": 0.2456
+  },
+  "accuracy_spread_across_variants": 0.09513333333333332
+}

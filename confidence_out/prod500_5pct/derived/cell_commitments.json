@@ -1,0 +1,422 @@
+{
+  "qwen2.5-0.5b-instruct__R1": {
+    "model": "qwen2.5-0.5b-instruct",
+    "tier": "R1",
+    "n": 100,
+    "accuracy": 0.19,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.19,
+    "parse_rate": 0.74
+  },
+  "qwen2.5-0.5b-instruct__R2": {
+    "model": "qwen2.5-0.5b-instruct",
+    "tier": "R2",
+    "n": 100,
+    "accuracy": 0.15,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.15,
+    "parse_rate": 0.8
+  },
+  "qwen2.5-0.5b-instruct__R3": {
+    "model": "qwen2.5-0.5b-instruct",
+    "tier": "R3",
+    "n": 100,
+    "accuracy": 0.02,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.02,
+    "parse_rate": 0.99
+  },
+  "qwen2.5-0.5b-instruct__C1": {
+    "model": "qwen2.5-0.5b-instruct",
+    "tier": "C1",
+    "n": 100,
+    "accuracy": 0.15,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.15,
+    "parse_rate": 0.89
+  },
+  "qwen2.5-0.5b-instruct__C2": {
+    "model": "qwen2.5-0.5b-instruct",
+    "tier": "C2",
+    "n": 100,
+    "accuracy": 0.22,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.22,
+    "parse_rate": 0.86
+  },
+  "qwen2.5-0.5b-instruct__C3": {
+    "model": "qwen2.5-0.5b-instruct",
+    "tier": "C3",
+    "n": 100,
+    "accuracy": 0.09,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.09,
+    "parse_rate": 0.71
+  },
+  "qwen2.5-1.5b-instruct__R1": {
+    "model": "qwen2.5-1.5b-instruct",
+    "tier": "R1",
+    "n": 100,
+    "accuracy": 0.31,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.31,
+    "parse_rate": 0.9
+  },
+  "qwen2.5-1.5b-instruct__R2": {
+    "model": "qwen2.5-1.5b-instruct",
+    "tier": "R2",
+    "n": 100,
+    "accuracy": 0.15,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.15,
+    "parse_rate": 0.95
+  },
+  "qwen2.5-1.5b-instruct__R3": {
+    "model": "qwen2.5-1.5b-instruct",
+    "tier": "R3",
+    "n": 100,
+    "accuracy": 0.05,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.05,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-1.5b-instruct__C1": {
+    "model": "qwen2.5-1.5b-instruct",
+    "tier": "C1",
+    "n": 100,
+    "accuracy": 0.6,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.6,
+    "parse_rate": 0.97
+  },
+  "qwen2.5-1.5b-instruct__C2": {
+    "model": "qwen2.5-1.5b-instruct",
+    "tier": "C2",
+    "n": 100,
+    "accuracy": 0.52,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.52,
+    "parse_rate": 0.87
+  },
+  "qwen2.5-1.5b-instruct__C3": {
+    "model": "qwen2.5-1.5b-instruct",
+    "tier": "C3",
+    "n": 100,
+    "accuracy": 0.33,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.33,
+    "parse_rate": 0.67
+  },
+  "qwen2.5-3b-instruct__R1": {
+    "model": "qwen2.5-3b-instruct",
+    "tier": "R1",
+    "n": 100,
+    "accuracy": 0.39,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.39,
+    "parse_rate": 0.94
+  },
+  "qwen2.5-3b-instruct__R2": {
+    "model": "qwen2.5-3b-instruct",
+    "tier": "R2",
+    "n": 100,
+    "accuracy": 0.17,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.17,
+    "parse_rate": 0.96
+  },
+  "qwen2.5-3b-instruct__R3": {
+    "model": "qwen2.5-3b-instruct",
+    "tier": "R3",
+    "n": 100,
+    "accuracy": 0.01,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.01,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-3b-instruct__C1": {
+    "model": "qwen2.5-3b-instruct",
+    "tier": "C1",
+    "n": 100,
+    "accuracy": 0.57,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.57,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-3b-instruct__C2": {
+    "model": "qwen2.5-3b-instruct",
+    "tier": "C2",
+    "n": 100,
+    "accuracy": 0.56,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.56,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-3b-instruct__C3": {
+    "model": "qwen2.5-3b-instruct",
+    "tier": "C3",
+    "n": 100,
+    "accuracy": 0.18,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.18,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-7b-instruct__R1": {
+    "model": "qwen2.5-7b-instruct",
+    "tier": "R1",
+    "n": 100,
+    "accuracy": 0.47,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.47,
+    "parse_rate": 0.94
+  },
+  "qwen2.5-7b-instruct__R2": {
+    "model": "qwen2.5-7b-instruct",
+    "tier": "R2",
+    "n": 100,
+    "accuracy": 0.25,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.25,
+    "parse_rate": 0.94
+  },
+  "qwen2.5-7b-instruct__R3": {
+    "model": "qwen2.5-7b-instruct",
+    "tier": "R3",
+    "n": 100,
+    "accuracy": 0.09,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.09,
+    "parse_rate": 0.95
+  },
+  "qwen2.5-7b-instruct__C1": {
+    "model": "qwen2.5-7b-instruct",
+    "tier": "C1",
+    "n": 100,
+    "accuracy": 0.69,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.69,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-7b-instruct__C2": {
+    "model": "qwen2.5-7b-instruct",
+    "tier": "C2",
+    "n": 100,
+    "accuracy": 0.66,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.66,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-7b-instruct__C3": {
+    "model": "qwen2.5-7b-instruct",
+    "tier": "C3",
+    "n": 100,
+    "accuracy": 0.36,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.36,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-7b-base__R1": {
+    "model": "qwen2.5-7b-base",
+    "tier": "R1",
+    "n": 100,
+    "accuracy": 0.53,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.53,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-7b-base__R2": {
+    "model": "qwen2.5-7b-base",
+    "tier": "R2",
+    "n": 100,
+    "accuracy": 0.22,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.22,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-7b-base__R3": {
+    "model": "qwen2.5-7b-base",
+    "tier": "R3",
+    "n": 100,
+    "accuracy": 0.09,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.09,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-7b-base__C1": {
+    "model": "qwen2.5-7b-base",
+    "tier": "C1",
+    "n": 100,
+    "accuracy": 0.31,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.31,
+    "parse_rate": 1.0
+  },
+  "qwen2.5-7b-base__C2": {
+    "model": "qwen2.5-7b-base",
+    "tier": "C2",
+    "n": 100,
+    "accuracy": 0.6,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": true,
+    "committed": true,
+    "pilot_accuracy": 0.6,
+    "parse_rate": 0.98
+  },
+  "qwen2.5-7b-base__C3": {
+    "model": "qwen2.5-7b-base",
+    "tier": "C3",
+    "n": 100,
+    "accuracy": 0.17,
+    "band": [
+      0.25,
+      0.8
+    ],
+    "in_band": false,
+    "committed": true,
+    "pilot_accuracy": 0.17,
+    "parse_rate": 0.98
+  }
+}

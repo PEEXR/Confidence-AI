@@ -1,0 +1,161 @@
+{
+  "available": true,
+  "n": 1166,
+  "formula": "correct ~ verbal_cal + behavioral_cal + internal_cal + is_reasoning + log_params + is_long + has_number + has_multi_entity + has_year + in_band + behavioral_cal_missing + internal_cal_missing + is_reasoning:internal_cal + log_params:internal_cal + layer_pct:is_reasoning",
+  "fixed_effects": [
+    "verbal_cal",
+    "behavioral_cal",
+    "internal_cal",
+    "is_reasoning",
+    "log_params",
+    "is_long",
+    "has_number",
+    "has_multi_entity",
+    "has_year",
+    "in_band",
+    "behavioral_cal_missing",
+    "internal_cal_missing"
+  ],
+  "imputed_counts": {
+    "behavioral_cal": 202,
+    "internal_cal": 194
+  },
+  "missingness_indicators": [
+    "behavioral_cal_missing",
+    "internal_cal_missing"
+  ],
+  "signals_dropped_all_missing": [],
+  "signals_near_all_missing": {},
+  "terms_dropped_degenerate": {},
+  "random_intercepts_requested": [
+    "question",
+    "model",
+    "tier",
+    "model_x_tier"
+  ],
+  "random_intercepts_fitted": [
+    "model",
+    "model_x_tier",
+    "question",
+    "tier"
+  ],
+  "n_questions": 600,
+  "n_cells": 12,
+  "per_cell": {
+    "qwen2.5-0.5b-instruct__C1": {
+      "n": 94,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-0.5b-instruct__C2": {
+      "n": 97,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-0.5b-instruct__C3": {
+      "n": 76,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-3b-instruct__C1": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-3b-instruct__C3": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-3b-instruct__R1": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-3b-instruct__R2": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-7b-instruct__C2": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-7b-instruct__C3": {
+      "n": 100,
+      "params": {
+        "Intercept": -57.36877949982085,
+        "verbal_cal": 655.3735471531028,
+        "behavioral_cal": 27.731947583205574,
+        "internal_cal": -15.202853219876241,
+        "is_long": -1.124322878624352,
+        "has_number": -0.38748372789669566,
+        "has_multi_entity": -0.428178362666331,
+        "has_year": -0.7792110503558631,
+        "in_band": -57.36879187894263
+      },
+      "pvalues": {
+        "Intercept": NaN,
+        "verbal_cal": 0.2568223144208911,
+        "behavioral_cal": 0.0004904156915976713,
+        "internal_cal": 0.3710381200452204,
+        "is_long": 0.17934957007187435,
+        "has_number": 0.692761142615453,
+        "has_multi_entity": 0.4959311932842342,
+        "has_year": 0.5489302223736068,
+        "in_band": NaN
+      }
+    },
+    "qwen2.5-7b-instruct__R1": {
+      "n": 100,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-7b-instruct__R2": {
+      "n": 99,
+      "error": "Singular matrix"
+    },
+    "qwen2.5-7b-instruct__R3": {
+      "n": 100,
+      "error": "Singular matrix"
+    }
+  },
+  "method": "bayes_mixed_glm",
+  "converged": true,
+  "fit_warnings": [],
+  "random_intercepts_dropped": [],
+  "params": {
+    "Intercept": -4.087517165138535,
+    "verbal_cal": -3.2648425677644357,
+    "behavioral_cal": 7.158772505962494,
+    "internal_cal": 2.9654738101591063,
+    "is_reasoning": -1.1513428105638854,
+    "log_params": 0.21609905196023454,
+    "is_long": -1.0375499419934364,
+    "has_number": -0.26408763248051054,
+    "has_multi_entity": -0.05297900357209603,
+    "has_year": -0.6268168416201572,
+    "in_band": 0.32942433499518814,
+    "behavioral_cal_missing": -1.4778828310188035,
+    "internal_cal_missing": 0.06604694917480203,
+    "is_reasoning:internal_cal": -0.5345468814422862,
+    "log_params:internal_cal": 0.030176780444465874,
+    "layer_pct:is_reasoning": 0.03613509007592941
+  },
+  "sd": {
+    "Intercept": 0.09387150739246329,
+    "verbal_cal": 0.2520611163028136,
+    "behavioral_cal": 0.218949310897244,
+    "internal_cal": 0.24624263568872243,
+    "is_reasoning": 0.12100431698745791,
+    "log_params": 0.0600436969861632,
+    "is_long": 0.1369542423000769,
+    "has_number": 0.12170059233653438,
+    "has_multi_entity": 0.12556916964153614,
+    "has_year": 0.5524788975822079,
+    "in_band": 0.11562831645121342,
+    "behavioral_cal_missing": 0.29214140899367197,
+    "internal_cal_missing": 0.2502082171246847,
+    "is_reasoning:internal_cal": 0.2970711058355743,
+    "log_params:internal_cal": 0.14017474233924154,
+    "layer_pct:is_reasoning": 0.001707396717184883
+  },
+  "vc_sd": {
+    "question": 0.3405912117723416,
+    "model": -1.4929980786873351,
+    "tier": -1.6548021283195222,
+    "model_x_tier": -1.5463658355377872
+  }
+}

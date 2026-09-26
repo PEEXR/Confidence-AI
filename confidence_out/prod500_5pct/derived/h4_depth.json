@@ -1,0 +1,256 @@
+{
+  "available": true,
+  "onsets": [
+    {
+      "model": "qwen2.5-0.5b-instruct",
+      "tier": "C2",
+      "family": "reasoning",
+      "params_b": 0.49,
+      "onset": 45.0,
+      "reached": true,
+      "asymptote": 0.875
+    },
+    {
+      "model": "qwen2.5-0.5b-instruct",
+      "tier": "C3",
+      "family": "reasoning",
+      "params_b": 0.49,
+      "onset": 15.0,
+      "reached": true,
+      "asymptote": 0.875
+    },
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "tier": "C1",
+      "family": "reasoning",
+      "params_b": 1.54,
+      "onset": 60.0,
+      "reached": true,
+      "asymptote": 0.7159142726858184
+    },
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "tier": "C2",
+      "family": "reasoning",
+      "params_b": 1.54,
+      "onset": 50.0,
+      "reached": true,
+      "asymptote": 0.7316341829085458
+    },
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "tier": "C3",
+      "family": "reasoning",
+      "params_b": 1.54,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.8614800759013282
+    },
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "tier": "R1",
+      "family": "retrieval",
+      "params_b": 1.54,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.940952380952381
+    },
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "tier": "R2",
+      "family": "retrieval",
+      "params_b": 1.54,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.9347826086956521
+    },
+    {
+      "model": "qwen2.5-1.5b-instruct",
+      "tier": "R3",
+      "family": "retrieval",
+      "params_b": 1.54,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.8171268507402961
+    },
+    {
+      "model": "qwen2.5-3b-instruct",
+      "tier": "C1",
+      "family": "reasoning",
+      "params_b": 3.09,
+      "onset": 60.0,
+      "reached": true,
+      "asymptote": 0.6755233494363929
+    },
+    {
+      "model": "qwen2.5-3b-instruct",
+      "tier": "C2",
+      "family": "reasoning",
+      "params_b": 3.09,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.8529292929292929
+    },
+    {
+      "model": "qwen2.5-3b-instruct",
+      "tier": "C3",
+      "family": "reasoning",
+      "params_b": 3.09,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.8377403846153847
+    },
+    {
+      "model": "qwen2.5-3b-instruct",
+      "tier": "R2",
+      "family": "retrieval",
+      "params_b": 3.09,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.9051620648259304
+    },
+    {
+      "model": "qwen2.5-3b-instruct",
+      "tier": "R3",
+      "family": "retrieval",
+      "params_b": 3.09,
+      "onset": 15.0,
+      "reached": true,
+      "asymptote": 0.7844551282051282
+    },
+    {
+      "model": "qwen2.5-7b-base",
+      "tier": "C1",
+      "family": "reasoning",
+      "params_b": 7.62,
+      "onset": 30.0,
+      "reached": true,
+      "asymptote": 0.745498199279712
+    },
+    {
+      "model": "qwen2.5-7b-base",
+      "tier": "C2",
+      "family": "reasoning",
+      "params_b": 7.62,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.8319191919191918
+    },
+    {
+      "model": "qwen2.5-7b-base",
+      "tier": "R1",
+      "family": "retrieval",
+      "params_b": 7.62,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.9251207729468599
+    },
+    {
+      "model": "qwen2.5-7b-base",
+      "tier": "R2",
+      "family": "retrieval",
+      "params_b": 7.62,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.9357575757575758
+    },
+    {
+      "model": "qwen2.5-7b-base",
+      "tier": "R3",
+      "family": "retrieval",
+      "params_b": 7.62,
+      "onset": 15.0,
+      "reached": true,
+      "asymptote": 0.8397745571658615
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "C1",
+      "family": "reasoning",
+      "params_b": 7.62,
+      "onset": 40.0,
+      "reached": true,
+      "asymptote": 0.718349358974359
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "C2",
+      "family": "reasoning",
+      "params_b": 7.62,
+      "onset": 40.0,
+      "reached": true,
+      "asymptote": 0.7668686868686869
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "C3",
+      "family": "reasoning",
+      "params_b": 7.62,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.8043831168831168
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "R1",
+      "family": "retrieval",
+      "params_b": 7.62,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.8787755102040816
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "R2",
+      "family": "retrieval",
+      "params_b": 7.62,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.8633814102564102
+    },
+    {
+      "model": "qwen2.5-7b-instruct",
+      "tier": "R3",
+      "family": "retrieval",
+      "params_b": 7.62,
+      "onset": 5.0,
+      "reached": true,
+      "asymptote": 0.8534902597402597
+    }
+  ],
+  "onset_rule": "two_consecutive",
+  "mean_onset_retrieval": 6.818181818181818,
+  "mean_onset_reasoning": 28.076923076923077,
+  "delta_reasoning_minus_retrieval": {
+    "delta": 21.25874125874126,
+    "lo": 9.719405594405597,
+    "hi": 33.045454545454525,
+    "excludes_zero": true
+  },
+  "n_reasoning_never_reached": 0,
+  "spearman_onset_vs_scale": {
+    "rho": -0.220548163474294,
+    "p": 0.3003869204238937,
+    "n": 24,
+    "lo": -0.5553343319715811,
+    "hi": 0.21195205837711778
+  },
+  "c1_sensitivity": {
+    "n_retrieval": 11,
+    "n_reasoning": 9,
+    "mean_retrieval": 6.818181818181818,
+    "mean_reasoning": 19.444444444444443,
+    "delta_without_c1": 12.626262626262625
+  },
+  "permutation_p": 0.0039,
+  "h4_pass": true,
+  "verdict": "H4 supported — internal signal onsets later for reasoning than retrieval",
+  "gate3_excluded_cells": [
+    "qwen2.5-0.5b-instruct__C1",
+    "qwen2.5-0.5b-instruct__R3",
+    "qwen2.5-3b-instruct__R1",
+    "qwen2.5-7b-base__C3"
+  ],
+  "n_cells": 24,
+  "coverage_note": "4 cell(s) excluded for failing Gate 3 — the depth curves are computed over 24 cells, not the full committed grid: ['qwen2.5-0.5b-instruct__C1', 'qwen2.5-0.5b-instruct__R3', 'qwen2.5-3b-instruct__R1', 'qwen2.5-7b-base__C3']"
+}

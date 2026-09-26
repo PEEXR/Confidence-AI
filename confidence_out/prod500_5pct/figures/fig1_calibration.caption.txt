@@ -1,0 +1,1 @@
+Figure 1 — calibration curves per signal, test split. Predicted under H1: the verbalized curve sits above the diagonal (runs hot) while behavioral and internal hug it. Null: all three on the diagonal with overlapping bands.

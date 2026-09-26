@@ -1,0 +1,10 @@
+{
+  "available": false,
+  "n_matched": 0,
+  "n_excluded_missing_signal": 701,
+  "excluded_by_model": {
+    "qwen2.5-7b-base": 600,
+    "qwen2.5-7b-instruct": 101
+  },
+  "verdict": "H3 untested — only 0/0 matched rows have BOTH a verbal and a behavioral/internal value. The pre-repair code would have reported a rate of 0.0 here rather than declining to test."
+}

@@ -1,0 +1,762 @@
+{
+  "per_cell": {
+    "qwen2.5-0.5b-instruct__C1": {
+      "verbal": {
+        "ece": 0.009341330016917185,
+        "brier": 0.05020580643209381,
+        "reliability": 8.726044648495802e-05,
+        "resolution": 0.0,
+        "uncertainty": 0.050362154821186056,
+        "n": 94,
+        "base_rate": 0.05319148936170213
+      },
+      "behavioral": {
+        "ece": 0.057340810646380524,
+        "brier": 0.0861782791709625,
+        "reliability": 0.003287968565584066,
+        "resolution": 0.0,
+        "uncertainty": 0.08264462809917356,
+        "n": 22,
+        "base_rate": 0.09090909090909091
+      }
+    },
+    "qwen2.5-0.5b-instruct__C2": {
+      "verbal": {
+        "ece": 0.05104402182184056,
+        "brier": 0.1726052807119014,
+        "reliability": 0.0026054921637485356,
+        "resolution": 0.0,
+        "uncertainty": 0.16962482729301734,
+        "n": 97,
+        "base_rate": 0.21649484536082475
+      },
+      "behavioral": {
+        "ece": 0.21279708679293358,
+        "brier": 0.22427785546817294,
+        "reliability": 0.02444998065083766,
+        "resolution": 0.020887632638513953,
+        "uncertainty": 0.2191380569758948,
+        "n": 37,
+        "base_rate": 0.32432432432432434
+      },
+      "internal": {
+        "ece": 0.08030206070761962,
+        "brier": 0.16834801579126982,
+        "reliability": 0.007094500094987438,
+        "resolution": 0.0022636363636363635,
+        "uncertainty": 0.1659,
+        "n": 100,
+        "base_rate": 0.21
+      }
+    },
+    "qwen2.5-0.5b-instruct__C3": {
+      "verbal": {
+        "ece": 0.002142606977029414,
+        "brier": 0.037939286703792284,
+        "reliability": 4.590764658015123e-06,
+        "resolution": 0.0,
+        "uncertainty": 0.03791551246537396,
+        "n": 76,
+        "base_rate": 0.039473684210526314
+      },
+      "internal": {
+        "ece": 0.00018015820136756816,
+        "brier": 0.029113877460445317,
+        "reliability": 3.245697751999724e-08,
+        "resolution": 0.0,
+        "uncertainty": 0.029099999999999997,
+        "n": 100,
+        "base_rate": 0.03
+      }
+    },
+    "qwen2.5-0.5b-instruct__R1": {},
+    "qwen2.5-0.5b-instruct__R2": {},
+    "qwen2.5-0.5b-instruct__R3": {
+      "behavioral": {
+        "ece": 0.18130381593409572,
+        "brier": 0.09353960969769716,
+        "reliability": 0.08233525498381468,
+        "resolution": 0.00296875,
+        "uncertainty": 0.01234375,
+        "n": 80,
+        "base_rate": 0.0125
+      }
+    },
+    "qwen2.5-1.5b-instruct__C1": {
+      "behavioral": {
+        "ece": 0.14151346179760452,
+        "brier": 0.2188667681925513,
+        "reliability": 0.023060727376662784,
+        "resolution": 0.03747377804411332,
+        "uncertainty": 0.23740108288213244,
+        "n": 98,
+        "base_rate": 0.6122448979591837
+      },
+      "internal": {
+        "ece": 0.07143002112862992,
+        "brier": 0.23529488057535666,
+        "reliability": 0.005354351488346597,
+        "resolution": 0.005416666666666664,
+        "uncertainty": 0.24,
+        "n": 100,
+        "base_rate": 0.6
+      }
+    },
+    "qwen2.5-1.5b-instruct__C2": {
+      "behavioral": {
+        "ece": 0.10832862784054023,
+        "brier": 0.1970342925678758,
+        "reliability": 0.01528678547287093,
+        "resolution": 0.024120722291604557,
+        "uncertainty": 0.2049164946519047,
+        "n": 73,
+        "base_rate": 0.7123287671232876
+      },
+      "internal": {
+        "ece": 0.1205607428780711,
+        "brier": 0.2501682186468366,
+        "reliability": 0.0297848013371979,
+        "resolution": 0.021932579185520364,
+        "uncertainty": 0.2451,
+        "n": 100,
+        "base_rate": 0.57
+      }
+    },
+    "qwen2.5-1.5b-instruct__C3": {
+      "behavioral": {
+        "ece": 0.13951112902712628,
+        "brier": 0.2524377742424431,
+        "reliability": 0.01946335512242348,
+        "resolution": 0.0,
+        "uncertainty": 0.23375624759707805,
+        "n": 51,
+        "base_rate": 0.37254901960784315
+      },
+      "internal": {
+        "ece": 0.07934215314138024,
+        "brier": 0.17877463618279812,
+        "reliability": 0.006295177265110239,
+        "resolution": 0.0,
+        "uncertainty": 0.1716,
+        "n": 100,
+        "base_rate": 0.22
+      }
+    },
+    "qwen2.5-1.5b-instruct__R1": {
+      "behavioral": {
+        "ece": 0.13059845709145318,
+        "brier": 0.13137775475511104,
+        "reliability": 0.01647486644075907,
+        "resolution": 0.10858473902899454,
+        "uncertainty": 0.22446593686895525,
+        "n": 97,
+        "base_rate": 0.3402061855670103
+      },
+      "internal": {
+        "ece": 0.09374925422471841,
+        "brier": 0.13658787354948035,
+        "reliability": 0.009287370285704078,
+        "resolution": 0.09635488400488403,
+        "uncertainty": 0.2211,
+        "n": 100,
+        "base_rate": 0.33
+      }
+    },
+    "qwen2.5-1.5b-instruct__R2": {
+      "behavioral": {
+        "ece": 0.10853204938327879,
+        "brier": 0.12315866395537246,
+        "reliability": 0.014951435464144496,
+        "resolution": 0.06005393951546028,
+        "uncertainty": 0.16790809241257418,
+        "n": 89,
+        "base_rate": 0.21348314606741572
+      },
+      "internal": {
+        "ece": 0.12813899283483784,
+        "brier": 0.13425965811095197,
+        "reliability": 0.02146278236809841,
+        "resolution": 0.051769565217391296,
+        "uncertainty": 0.1659,
+        "n": 100,
+        "base_rate": 0.21
+      }
+    },
+    "qwen2.5-1.5b-instruct__R3": {
+      "behavioral": {
+        "ece": 0.011724463331641063,
+        "brier": 0.03019959628945249,
+        "reliability": 0.00013746304041499586,
+        "resolution": 0.0,
+        "uncertainty": 0.0302734375,
+        "n": 96,
+        "base_rate": 0.03125
+      },
+      "internal": {
+        "ece": 0.009349901014503968,
+        "brier": 0.028854055559103628,
+        "reliability": 8.742064898102234e-05,
+        "resolution": 0.0,
+        "uncertainty": 0.029099999999999997,
+        "n": 100,
+        "base_rate": 0.03
+      }
+    },
+    "qwen2.5-3b-instruct__C1": {
+      "verbal": {
+        "ece": 0.07419593259421595,
+        "brier": 0.24432225466192675,
+        "reliability": 0.005505036413525424,
+        "resolution": 0.0,
+        "uncertainty": 0.24,
+        "n": 100,
+        "base_rate": 0.4
+      },
+      "behavioral": {
+        "ece": 0.11615583268602096,
+        "brier": 0.22279661965401218,
+        "reliability": 0.022178501674860532,
+        "resolution": 0.04028325929914299,
+        "uncertainty": 0.24,
+        "n": 100,
+        "base_rate": 0.4
+      },
+      "internal": {
+        "ece": 0.11553057043166437,
+        "brier": 0.2167691071967982,
+        "reliability": 0.017661469757460208,
+        "resolution": 0.03831865537035023,
+        "uncertainty": 0.24,
+        "n": 100,
+        "base_rate": 0.4
+      }
+    },
+    "qwen2.5-3b-instruct__C2": {
+      "behavioral": {
+        "ece": 0.12097504365152036,
+        "brier": 0.2000270530493293,
+        "reliability": 0.017993374956997918,
+        "resolution": 0.06460194153049248,
+        "uncertainty": 0.24640000000000004,
+        "n": 100,
+        "base_rate": 0.44
+      },
+      "internal": {
+        "ece": 0.08840946877545723,
+        "brier": 0.24001577323064602,
+        "reliability": 0.011606790332081474,
+        "resolution": 0.01876842105263158,
+        "uncertainty": 0.24640000000000004,
+        "n": 100,
+        "base_rate": 0.44
+      }
+    },
+    "qwen2.5-3b-instruct__C3": {
+      "verbal": {
+        "ece": 0.03151554204253018,
+        "brier": 0.10659302129407937,
+        "reliability": 0.0009932293902344875,
+        "resolution": 0.0,
+        "uncertainty": 0.1056,
+        "n": 100,
+        "base_rate": 0.12
+      },
+      "behavioral": {
+        "ece": 0.07412836481575463,
+        "brier": 0.09901255666207144,
+        "reliability": 0.004015242940632161,
+        "resolution": 0.008352403846153846,
+        "uncertainty": 0.1056,
+        "n": 100,
+        "base_rate": 0.12
+      },
+      "internal": {
+        "ece": 0.029716550451985176,
+        "brier": 0.10465571949643897,
+        "reliability": 0.0008830733707653805,
+        "resolution": 0.0,
+        "uncertainty": 0.1056,
+        "n": 100,
+        "base_rate": 0.12
+      }
+    },
+    "qwen2.5-3b-instruct__R1": {
+      "verbal": {
+        "ece": 0.12121426805012678,
+        "brier": 0.2229354194854281,
+        "reliability": 0.03585626675410145,
+        "resolution": 0.043320847268673364,
+        "uncertainty": 0.2304,
+        "n": 100,
+        "base_rate": 0.36
+      },
+      "behavioral": {
+        "ece": 0.2088026527447611,
+        "brier": 0.123323374160254,
+        "reliability": 0.044350155304218646,
+        "resolution": 0.15166128899835793,
+        "uncertainty": 0.2304,
+        "n": 100,
+        "base_rate": 0.36
+      }
+    },
+    "qwen2.5-3b-instruct__R2": {
+      "verbal": {
+        "ece": 0.017615034618413836,
+        "brier": 0.13961154423494795,
+        "reliability": 0.00033268421508129026,
+        "resolution": 0.00034297924297924315,
+        "uncertainty": 0.1411,
+        "n": 100,
+        "base_rate": 0.17
+      },
+      "behavioral": {
+        "ece": 0.13781238913449537,
+        "brier": 0.09609948139694095,
+        "reliability": 0.034578516113979225,
+        "resolution": 0.08003808049535602,
+        "uncertainty": 0.1411,
+        "n": 100,
+        "base_rate": 0.17
+      },
+      "internal": {
+        "ece": 0.11123691353590995,
+        "brier": 0.10632368030457412,
+        "reliability": 0.024925002530435794,
+        "resolution": 0.06043566433566433,
+        "uncertainty": 0.1411,
+        "n": 100,
+        "base_rate": 0.17
+      }
+    },
+    "qwen2.5-3b-instruct__R3": {
+      "behavioral": {
+        "ece": 0.03306708647255055,
+        "brier": 0.04666478588819583,
+        "reliability": 0.0007901137301229304,
+        "resolution": 0.0008197831978319782,
+        "uncertainty": 0.0475,
+        "n": 100,
+        "base_rate": 0.05
+      },
+      "internal": {
+        "ece": 0.03306408547105279,
+        "brier": 0.04779442879843101,
+        "reliability": 0.00148000298369435,
+        "resolution": 4.677754677754678e-05,
+        "uncertainty": 0.0475,
+        "n": 100,
+        "base_rate": 0.05
+      }
+    },
+    "qwen2.5-7b-base__C1": {
+      "behavioral": {
+        "ece": 0.11967358240316572,
+        "brier": 0.18372968550426447,
+        "reliability": 0.020024690978490692,
+        "resolution": 0.07293057539355179,
+        "uncertainty": 0.2379,
+        "n": 100,
+        "base_rate": 0.39
+      },
+      "internal": {
+        "ece": 0.08376631955235908,
+        "brier": 0.2320624627299011,
+        "reliability": 0.006935240951100468,
+        "resolution": 0.012329590017825316,
+        "uncertainty": 0.2379,
+        "n": 100,
+        "base_rate": 0.39
+      }
+    },
+    "qwen2.5-7b-base__C2": {
+      "behavioral": {
+        "ece": 0.12934035146954942,
+        "brier": 0.16731785355488746,
+        "reliability": 0.012950573111200429,
+        "resolution": 0.08319991216512955,
+        "uncertainty": 0.2356,
+        "n": 100,
+        "base_rate": 0.62
+      },
+      "internal": {
+        "ece": 0.08332604457968538,
+        "brier": 0.21721593943291018,
+        "reliability": 0.005915861691375462,
+        "resolution": 0.0231938875938876,
+        "uncertainty": 0.2356,
+        "n": 100,
+        "base_rate": 0.62
+      }
+    },
+    "qwen2.5-7b-base__C3": {
+      "behavioral": {
+        "ece": 0.12496346116597754,
+        "brier": 0.20199767396698337,
+        "reliability": 0.023238030946480945,
+        "resolution": 0.015020779220779223,
+        "uncertainty": 0.1971,
+        "n": 100,
+        "base_rate": 0.27
+      }
+    },
+    "qwen2.5-7b-base__R1": {
+      "behavioral": {
+        "ece": 0.08259450278664666,
+        "brier": 0.14512627816490725,
+        "reliability": 0.005986982406058523,
+        "resolution": 0.11166789044289045,
+        "uncertainty": 0.2491,
+        "n": 100,
+        "base_rate": 0.53
+      },
+      "internal": {
+        "ece": 0.11891064901691245,
+        "brier": 0.18513496520740666,
+        "reliability": 0.012797692622145685,
+        "resolution": 0.07447825502171854,
+        "uncertainty": 0.2491,
+        "n": 100,
+        "base_rate": 0.53
+      }
+    },
+    "qwen2.5-7b-base__R2": {
+      "behavioral": {
+        "ece": 0.09668484897711607,
+        "brier": 0.12665364232213208,
+        "reliability": 0.021214748136237093,
+        "resolution": 0.05045054945054945,
+        "uncertainty": 0.16000000000000003,
+        "n": 100,
+        "base_rate": 0.2
+      },
+      "internal": {
+        "ece": 0.09226982536917266,
+        "brier": 0.1277742299037082,
+        "reliability": 0.015266630170507271,
+        "resolution": 0.04626501035196687,
+        "uncertainty": 0.16000000000000003,
+        "n": 100,
+        "base_rate": 0.2
+      }
+    },
+    "qwen2.5-7b-base__R3": {
+      "behavioral": {
+        "ece": 0.03033569208746331,
+        "brier": 0.048088353053214995,
+        "reliability": 0.0009202542144253839,
+        "resolution": 0.0,
+        "uncertainty": 0.0475,
+        "n": 100,
+        "base_rate": 0.05
+      },
+      "internal": {
+        "ece": 0.028837298549276337,
+        "brier": 0.048336186293270675,
+        "reliability": 0.0008315897876200951,
+        "resolution": 0.0,
+        "uncertainty": 0.0475,
+        "n": 100,
+        "base_rate": 0.05
+      }
+    },
+    "qwen2.5-7b-instruct__C1": {
+      "behavioral": {
+        "ece": 0.13106439099964176,
+        "brier": 0.1628804043402708,
+        "reliability": 0.03645808140480583,
+        "resolution": 0.12093549783549784,
+        "uncertainty": 0.2491,
+        "n": 100,
+        "base_rate": 0.53
+      },
+      "internal": {
+        "ece": 0.134841141699811,
+        "brier": 0.22459655054429528,
+        "reliability": 0.024975139680159297,
+        "resolution": 0.04780243864136044,
+        "uncertainty": 0.2491,
+        "n": 100,
+        "base_rate": 0.53
+      }
+    },
+    "qwen2.5-7b-instruct__C2": {
+      "verbal": {
+        "ece": 0.04046976349036757,
+        "brier": 0.2374268145807415,
+        "reliability": 0.0016378017569662882,
+        "resolution": 0.0,
+        "uncertainty": 0.2356,
+        "n": 100,
+        "base_rate": 0.62
+      },
+      "behavioral": {
+        "ece": 0.12547729608012262,
+        "brier": 0.19764428132565268,
+        "reliability": 0.030604242554029795,
+        "resolution": 0.07000702087286527,
+        "uncertainty": 0.2356,
+        "n": 100,
+        "base_rate": 0.62
+      },
+      "internal": {
+        "ece": 0.07926719082616926,
+        "brier": 0.2253262358572515,
+        "reliability": 0.009982527580750458,
+        "resolution": 0.015357142857142856,
+        "uncertainty": 0.2356,
+        "n": 100,
+        "base_rate": 0.62
+      }
+    },
+    "qwen2.5-7b-instruct__C3": {
+      "verbal": {
+        "ece": 0.08822028026569692,
+        "brier": 0.20015515681270643,
+        "reliability": 0.007782817850158113,
+        "resolution": 0.0,
+        "uncertainty": 0.19240000000000002,
+        "n": 100,
+        "base_rate": 0.26
+      },
+      "behavioral": {
+        "ece": 0.12506380138694548,
+        "brier": 0.1838729369489143,
+        "reliability": 0.020665786960264675,
+        "resolution": 0.026800656814449916,
+        "uncertainty": 0.19240000000000002,
+        "n": 100,
+        "base_rate": 0.26
+      },
+      "internal": {
+        "ece": 0.08118212698545169,
+        "brier": 0.19712552185689577,
+        "reliability": 0.006591813519989693,
+        "resolution": 0.00017576853526220582,
+        "uncertainty": 0.19240000000000002,
+        "n": 100,
+        "base_rate": 0.26
+      }
+    },
+    "qwen2.5-7b-instruct__R1": {
+      "verbal": {
+        "ece": 0.1323304626988523,
+        "brier": 0.23313565443250564,
+        "reliability": 0.006610863130000964,
+        "resolution": 0.01683718079673136,
+        "uncertainty": 0.24840000000000004,
+        "n": 100,
+        "base_rate": 0.46
+      },
+      "behavioral": {
+        "ece": 0.13904245881510596,
+        "brier": 0.16822912266981283,
+        "reliability": 0.019846434069576275,
+        "resolution": 0.10010503859633454,
+        "uncertainty": 0.24793388429752064,
+        "n": 99,
+        "base_rate": 0.45454545454545453
+      },
+      "internal": {
+        "ece": 0.11910970211183834,
+        "brier": 0.18154656698874674,
+        "reliability": 0.00915973273286796,
+        "resolution": 0.07688193473193473,
+        "uncertainty": 0.24840000000000004,
+        "n": 100,
+        "base_rate": 0.46
+      }
+    },
+    "qwen2.5-7b-instruct__R2": {
+      "verbal": {
+        "ece": 0.025231358805917356,
+        "brier": 0.1568671222594317,
+        "reliability": 0.000636621467192944,
+        "resolution": 0.0,
+        "uncertainty": 0.1550862156922763,
+        "n": 99,
+        "base_rate": 0.1919191919191919
+      },
+      "behavioral": {
+        "ece": 0.07967439519144849,
+        "brier": 0.13624902985705362,
+        "reliability": 0.00731448712501546,
+        "resolution": 0.029316304390895668,
+        "uncertainty": 0.15750876820065896,
+        "n": 97,
+        "base_rate": 0.1958762886597938
+      },
+      "internal": {
+        "ece": 0.07912300997154981,
+        "brier": 0.13062284975268817,
+        "reliability": 0.014880245259318099,
+        "resolution": 0.03862460220318238,
+        "uncertainty": 0.1539,
+        "n": 100,
+        "base_rate": 0.19
+      }
+    },
+    "qwen2.5-7b-instruct__R3": {
+      "verbal": {
+        "ece": 0.0002579698527180596,
+        "brier": 0.038115410769824824,
+        "reliability": 6.654844491137737e-08,
+        "resolution": 0.0,
+        "uncertainty": 0.0384,
+        "n": 100,
+        "base_rate": 0.04
+      },
+      "behavioral": {
+        "ece": 0.0007805363292004083,
+        "brier": 0.037734226032591286,
+        "reliability": 6.092369612016482e-07,
+        "resolution": 0.0,
+        "uncertainty": 0.03877155392306908,
+        "n": 99,
+        "base_rate": 0.04040404040404041
+      },
+      "internal": {
+        "ece": 0.0003054163889564601,
+        "brier": 0.038556668532597184,
+        "reliability": 9.327917064320374e-08,
+        "resolution": 0.0,
+        "uncertainty": 0.0384,
+        "n": 100,
+        "base_rate": 0.04
+      }
+    }
+  },
+  "pooled": {
+    "verbal": {
+      "n": 1166,
+      "ece": 0.035603803930555566,
+      "ece_lo": 0.023898074964168518,
+      "ece_hi": 0.06144872874908269,
+      "brier": 0.15617908795373864,
+      "brier_lo": 0.14346844702047507,
+      "brier_hi": 0.16827637435127576,
+      "reliability": 0.003804308614194717,
+      "resolution": 0.034261473779887835,
+      "uncertainty": 0.18728540788316186,
+      "base_rate": 0.24957118353344768
+    },
+    "behavioral": {
+      "n": 2451,
+      "ece": 0.04267030702658523,
+      "ece_lo": 0.03469188803507542,
+      "ece_hi": 0.06056859072062082,
+      "brier": 0.14260021123089336,
+      "brier_lo": 0.13478835033807463,
+      "brier_hi": 0.15073701364783768,
+      "reliability": 0.0027751414364541177,
+      "resolution": 0.07589333479087618,
+      "uncertainty": 0.21546256026524616,
+      "base_rate": 0.3141574867401061
+    },
+    "internal": {
+      "n": 2400,
+      "ece": 0.0363970142243544,
+      "ece_lo": 0.027881521531107716,
+      "ece_hi": 0.05408052242917476,
+      "brier": 0.15355242091678345,
+      "brier_lo": 0.14531074394952023,
+      "brier_hi": 0.16131893202451658,
+      "reliability": 0.0008540436545699282,
+      "resolution": 0.05770257377366283,
+      "uncertainty": 0.2111581597222222,
+      "base_rate": 0.30291666666666667
+    }
+  },
+  "coverage": {
+    "cells_total": 30,
+    "per_signal": {
+      "verbal": {
+        "n_rows": 1166,
+        "n_cells": 12,
+        "missing_cells": [
+          "qwen2.5-0.5b-instruct__R1",
+          "qwen2.5-0.5b-instruct__R2",
+          "qwen2.5-0.5b-instruct__R3",
+          "qwen2.5-1.5b-instruct__C1",
+          "qwen2.5-1.5b-instruct__C2",
+          "qwen2.5-1.5b-instruct__C3",
+          "qwen2.5-1.5b-instruct__R1",
+          "qwen2.5-1.5b-instruct__R2",
+          "qwen2.5-1.5b-instruct__R3",
+          "qwen2.5-3b-instruct__C2",
+          "qwen2.5-3b-instruct__R3",
+          "qwen2.5-7b-base__C1",
+          "qwen2.5-7b-base__C2",
+          "qwen2.5-7b-base__C3",
+          "qwen2.5-7b-base__R1",
+          "qwen2.5-7b-base__R2",
+          "qwen2.5-7b-base__R3",
+          "qwen2.5-7b-instruct__C1"
+        ]
+      },
+      "behavioral": {
+        "n_rows": 2451,
+        "n_cells": 29,
+        "missing_cells": [
+          "qwen2.5-0.5b-instruct__R2"
+        ]
+      },
+      "internal": {
+        "n_rows": 2400,
+        "n_cells": 24,
+        "missing_cells": [
+          "qwen2.5-0.5b-instruct__C1",
+          "qwen2.5-0.5b-instruct__R1",
+          "qwen2.5-0.5b-instruct__R2",
+          "qwen2.5-0.5b-instruct__R3",
+          "qwen2.5-3b-instruct__R1",
+          "qwen2.5-7b-base__C3"
+        ]
+      }
+    },
+    "cells_all_three_signals": [
+      "qwen2.5-0.5b-instruct__C2",
+      "qwen2.5-0.5b-instruct__C3",
+      "qwen2.5-3b-instruct__C1",
+      "qwen2.5-3b-instruct__C3",
+      "qwen2.5-3b-instruct__R2",
+      "qwen2.5-7b-instruct__C2",
+      "qwen2.5-7b-instruct__C3",
+      "qwen2.5-7b-instruct__R1",
+      "qwen2.5-7b-instruct__R2",
+      "qwen2.5-7b-instruct__R3"
+    ],
+    "cells_equal": false,
+    "n_rows_by_signal": {
+      "verbal": 1166,
+      "behavioral": 2451,
+      "internal": 2400
+    },
+    "n_rows_complete_case": 842,
+    "n_rows_test": 3000,
+    "like_for_like": false,
+    "warning": "Signals do not score the same questions, so pooled ECE/Brier/Murphy and the best-worst delta are computed over DIFFERENT sets and are not a like-for-like comparison. Cells carrying all three: 10 of 30. Rows per signal: {'verbal': 1166, 'behavioral': 2451, 'internal': 2400}; only 842 of 3000 test rows carry all three signals. Use the complete-case subset for any cross-signal claim."
+  },
+  "ece_ranking": [
+    "verbal",
+    "internal",
+    "behavioral"
+  ],
+  "resolution_ranking": [
+    "behavioral",
+    "internal",
+    "verbal"
+  ],
+  "delta_worst_minus_best": {
+    "worst": "behavioral",
+    "best": "verbal",
+    "delta": 0.007066503096029665,
+    "lo": -0.016403911877763782,
+    "hi": 0.027221973771039888,
+    "excludes_zero": false
+  },
+  "signals_separable": false,
+  "direction_matches_prediction": false,
+  "h1_pass": false,
+  "verdict": "H1 falsified — CIs overlap, no ordering distinguishable"
+}

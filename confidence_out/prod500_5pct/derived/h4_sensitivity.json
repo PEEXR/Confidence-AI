@@ -1,0 +1,25 @@
+{
+  "description": "Traceable sensitivity analysis and permutation tests for H4 depth onsets",
+  "status": "committed_sensitivity_artifact",
+  "h4_permutation_test": {
+    "n_retrieval": 11,
+    "n_reasoning": 11,
+    "mean_retrieval_onset": 27.2727,
+    "mean_reasoning_onset": 40.9091,
+    "observed_delta": 13.6364,
+    "n_permutations": 20000,
+    "seed": 20260813,
+    "one_sided_p_value": 0.0526
+  },
+  "h4_c1_sensitivity": {
+    "dropped_cells": [
+      "qwen2.5-3b-instruct__C1",
+      "qwen2.5-7b-instruct__C1"
+    ],
+    "reason": "Both C1 cells exhibit onset at 75% layer depth on coarse 25-pp grid",
+    "n_reasoning_remaining": 9,
+    "mean_reasoning_remaining": 33.3333,
+    "delta_without_c1_75": 6.0606,
+    "delta_reduction_summary": "13.64% -> 6.06%"
+  }
+}
