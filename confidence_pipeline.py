@@ -5958,24 +5958,26 @@ def run_pipeline(cfg: Config, judge_cfg: JudgeConfig) -> dict:
 # CELL 23 — RUN
 # Safe to re-execute: every stage is idempotent and resumes from checkpoints.
 # ============================================================================
-RESULTS = run_pipeline(CFG, JUDGE)
+if __name__ == "__main__":
+    RESULTS = run_pipeline(CFG, JUDGE)
 
-print("\n" + "=" * 74)
-print(f"run '{CFG.RUN_NAME}'  ·  config {CFG.hash()}  ·  output {PATHS['root']}")
-print("=" * 74)
-_rep = RESULTS.get("report", {})
-if _rep:
-    _g = _rep["grid"]
-    print(f"grid          : {_g['cells_committed']}/{_g['cells_total']} cells committed "
-          f"({_g['ragged_by']} excluded by the 25–80% band)")
-    print(f"gpu measured  : {_rep['compute']['measured_gpu_hours']} hours")
-    print("\ngates")
-    for k, v in _rep["gates"].items():
-        print(f"  {k:26s} {v}")
-    print("\nhypotheses")
-    for k, v in _rep["hypotheses"].items():
-        print(f"  {k}: {v}")
-    print(f"\nfigures : {len(_rep['artifacts']['figures'])}  ->  {PATHS['figures']}")
-    print(f"tables  : {len(_rep['artifacts']['tables'])}  ->  {PATHS['tables']}")
-    print(f"\nNEXT: fill in {PATHS['tables'] / 'gate1_manual_check_sheet.csv'} to close Gate 1,")
-    print(f"      then paste {PATHS['meta'] / 'run_log_rows.md'} into PLAN.md §17.2.")
+    print("\n" + "=" * 74)
+    print(f"run '{CFG.RUN_NAME}'  ·  config {CFG.hash()}  ·  output {PATHS['root']}")
+    print("=" * 74)
+    _rep = RESULTS.get("report", {})
+    if _rep:
+        _g = _rep["grid"]
+        print(f"grid          : {_g['cells_committed']}/{_g['cells_total']} cells committed "
+              f"({_g['ragged_by']} excluded by the 25–80% band)")
+        print(f"gpu measured  : {_rep['compute']['measured_gpu_hours']} hours")
+        print("\ngates")
+        for k, v in _rep["gates"].items():
+            print(f"  {k:26s} {v}")
+        print("\nhypotheses")
+        for k, v in _rep["hypotheses"].items():
+            print(f"  {k}: {v}")
+        print(f"\nfigures : {len(_rep['artifacts']['figures'])}  ->  {PATHS['figures']}")
+        print(f"tables  : {len(_rep['artifacts']['tables'])}  ->  {PATHS['tables']}")
+        print(f"\nNEXT: fill in {PATHS['tables'] / 'gate1_manual_check_sheet.csv'} to close Gate 1,")
+        print(f"      then paste {PATHS['meta'] / 'run_log_rows.md'} into PLAN.md §17.2.")
+
