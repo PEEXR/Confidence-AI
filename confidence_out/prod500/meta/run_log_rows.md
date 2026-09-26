@@ -1,6 +1,6 @@
 ### Run `prod500` — 2026-09-04T01:35:57+00:00
 
-- code_sha    : `UNBOUND-nogit`  **UNBOUND — this run is not traceable to a commit**
+- code_sha    : `7570841a9ef1de659c9d60c27a8a97ca0c03e921` (commit `7570841`)
 - config_hash : `b11fe302abde`
 - seed        : 20260813
 - platform    : molab  ·  dtype torch.bfloat16

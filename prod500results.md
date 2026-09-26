@@ -18,7 +18,7 @@ The `prod500` dataset is the first **fully repaired, full-grid production benchm
 | **Total Grid Cells** | 13 of 30 committed | 13 of 30 committed | **30 of 30 committed (100% full grid)** |
 | **Activation Tap Method** | Broken tap (measured decode artifacts) | Broken tap (dirty late-layer vectors) | **Frozen prefill pass before decode** (Fixed tap) |
 | **Gate 3 Negative Control ($p_0$)**| Absent | Absent | **Enforced ($p_0 \approx 0.50 \pm 0.10$)**; caught 7B-base C3 |
-| **H4 Verdict (Depth Onset)** | Falsified ($\Delta \approx +2.7\%$, CI crosses 0) | Falsified (CIs overlapped) | **SUPPORTED $\checkmark$ ($p < 0.05$, $\Delta = +13.64\%$)** |
+| **H4 Verdict (Depth Onset)** | Falsified ($\Delta \approx +2.7\%$, CI crosses 0) | Falsified (CIs overlapped) | **SUGGESTIVE TREND ($\Delta = +13.64\%$, permutation $p = 0.053$, 25-pp grid)** |
 | **H3 Evaluation** | False positive bar ($0.0\%$ due to NaN) | False positive bar ($0.0\%$ due to NaN) | **Honest Null / Untested** (Declined to test) |
 | **Gate 1 Status** | Null / Unfilled | Completed (97.5% manual agreement) | **PASSED (97.5% manual agreement imported)** |
 | **Gate 2 Status** | Falsified | Falsified | **Falsified (Fallback to `Bfix` canonical)** |
@@ -76,7 +76,7 @@ The `confidence_out/prod500/` folder organizes the complete experimental outputs
 | **H1** | Calibration hierarchy (ECE / Murphy) | Bootstrap CI excludes 0 | $\Delta_{\text{worst}-\text{best}} = 0.0071$, 95% CI $[-0.016, +0.027]$ | **FALSIFIED / NULL** |
 | **H2** | Error quadrants associate with question features | Gate 1 & Cell Replication | Driven by model $\times$ tier proxies, fails cell replication | **DESCRIPTIVE ONLY** |
 | **H3** | Base vs. Instruct overconfidence drop | Gate 4 ($N \ge 20$ matched) | 0 / 0 matched rows (Base model fails verbal formatting) | **UNTESTED / HONEST NULL** |
-| **H4** | Internal probe onsets deeper for reasoning than retrieval | **Gate 3** (Probe Validity) | Retrieval onset: **27.3%**, Reasoning onset: **40.9%** ($\Delta = \mathbf{+13.64\%}$) | **SUPPORTED $\checkmark$ ($p < 0.05$)** |
+| **H4** | Internal probe onsets deeper for reasoning than retrieval | **Gate 3** (Probe Validity) | Retrieval onset: **27.3%**, Reasoning onset: **40.9%** ($\Delta = \mathbf{+13.64\%}$) | **SUGGESTIVE TREND** *(Motivates 5–10% sweep)* |
 
 ---
 
@@ -117,22 +117,23 @@ Because on questions where the model boldly says "90% confident" (Format A), it 
   * **Excessive Hedging:** $10.8\%$ (90 rows)
   * **Performative Certainty:** $1.1\%$ (9 rows)
   * In pooled chi-square tests, question features like `has_multi_entity` ($p = 3.8 \times 10^{-17}$) and `has_number` ($p = 1.0 \times 10^{-14}$) seemed significant.
-  * **However, within-cell replication failed on all features** ($0 / 3$ cells replicated). The apparent pooled significance was a statistical illusion: math tiers have numbers; trivia tiers do not. The features were simply proxies for task tiers, not question-level drivers.
-* **The Verdict:** **H2 Not Supported**. Reported strictly as a descriptive result: cross-signal disagreement is heterogeneous across cells, not an invariant property of question syntax.
+  * **Threshold Artifact vs. Continuous Metric ($\Delta = \text{Verbal} - \text{Behavioral}$):** The 10:1 skew (90 vs. 9) is an artifact of the hardcoded 0.5 cutoff on calibrated probabilities for hard tasks (and is hyper-concentrated: Performative Certainty appears in only 1 of 9 cells, Excessive Hedging in 2 of 9 cells; in 8 of 9 cells, calibrated verbal confidence never exceeds 0.50). When evaluated as a continuous gap, $\Delta$ is centered symmetrically at zero ($\text{mean} = -0.006, \text{median} = -0.0004, \text{SD} = 0.114$). Regressing continuous $\Delta$ on question characteristics under classical OLS across all 831 complete-case items confirms zero association (`is_long`: $\beta = +0.007, p = 0.370$; `has_year`: $\beta = +0.007, \text{SE} = 0.017, p = 0.650$ [using classical SE; robust HC1 yields $p \approx 0.43$, still non-significant]; `has_number`: $\beta = +0.001, p = 0.917$; `has_multi_entity`: $\beta = +0.005, p = 0.545$). With cell fixed effects, all $p > 0.50$ (similarly, $\Delta_{\text{internal}} = \text{Verbal} - \text{Internal}$ yields all $p \in [0.65, 0.99]$).
+* **The Verdict:** **H2 Not Supported**. Reported strictly as a descriptive result: cross-signal disagreement is heterogeneous across cells and driven by task difficulty, not an invariant property of question syntax.
 
 #### 4. Hypothesis H3 (Gate 4) — Post-Training Overconfidence Reduction: **UNTESTED**
 * **The Claim:** Instruction tuning (7B-Instruct vs. 7B-Base) reduces performative overconfidence without triggering the missed-knowledge guard.
 * **The Evidence:** Raw unaligned base models (`qwen2.5-7b-base`) do not follow prompt instructions to output verbal confidence strings. Across the test split, $600/600$ base rows had missing verbal data, leaving $0/0$ matched complete cases.
 * **The Verdict:** **Gate 4 Untested**. Unlike the pre-repair legacy code (which coerced NaNs into a bogus $0.0\%$ overconfidence bar), the pipeline correctly declined to test.
 
-#### 5. Hypothesis H4 (Gate 3) — Emergence of Internal Confidence: **SUPPORTED $\checkmark$**
+#### 5. Hypothesis H4 (Gate 3) — Emergence of Internal Confidence: **SUGGESTIVE TREND**
 * **The Claim:** Internal representations of correctness emerge earlier in transformer depth for factual retrieval than for multi-step reasoning.
 * **The Evidence:** Across 22 validated cells that passed Gate 3:
-  * **Mean Onset Depth for Factual Retrieval (R1, R2, R3):** **$27.3\%$** of layer depth.
-  * **Mean Onset Depth for Multi-Step Reasoning (C1, C2, C3):** **$40.9\%$** of layer depth.
+  * **Mean Onset Depth for Factual Retrieval (R1, R2, R3):** **$27.3\%$** of layer depth (10 of 11 cells at 25%, 1 at 50%).
+  * **Mean Onset Depth for Multi-Step Reasoning (C1, C2, C3):** **$40.9\%$** of layer depth (6 at 25%, 3 at 50%, 2 at 75%).
   * **Difference:** $\Delta(\text{reasoning} - \text{retrieval}) = \mathbf{+13.64\%}$ depth.
-  * **Bootstrap 95% CI:** $[+2.27\%, +27.27\%]$ — **strictly excludes zero ($p < 0.05$)**.
-* **The Verdict:** **H4 Supported**. This is the primary mechanistic interpretability breakthrough of the project.
+  * **Bootstrap 95% CI:** $[+2.27\%, +27.27\%]$.
+  * **Discrete Grid Resolution & Caveats:** Probes were evaluated on a coarse 5-point discrete grid ($0\%, 25\%, 50\%, 75\%, 100\%$), restricting observed onsets to $\{25\%, 50\%, 75\%\}$. A permutation test on the 11 vs 11 onsets yields $p = 0.053$. Sensitivity analysis shows the effect is heavily carried by two C1 cells at 75% (excluding them reduces $\Delta$ from $13.64\%$ to $6.06\%$).
+* **The Verdict:** **H4 Suggestive Trend**. Rather than claiming definitive significance ($p < 0.05$), this represents a compelling directional pattern that motivates a finer 5–10% probe sweep to definitively establish depth dynamics.
 
 ---
 
@@ -289,12 +290,12 @@ How does model accuracy degrade from popular head entities (R1) to obscure tail 
 1. **If you want to know if an LLM is telling the truth, DO NOT ask it.** Verbal confidence is an ungrounded linguistic performance ($\rho = 0.086$ with internal state, $\beta = -1.95$ in multi-level regression). Models bluff and hedge based on prompt format.
 2. **Sample its answers instead.** Multi-sample semantic entropy is the single strongest indicator of correctness ($\beta = +7.41$, Resolution $= 0.0759$). If an LLM gives the exact same answer across 10 temperature samples, it is almost certainly right.
 3. **Internal probes work, and they scale with model size.** Probing hidden states adds independent predictive power ($\beta = +1.06$), and the signal becomes substantially sharper as models scale up ($\beta_{\text{scale}} = +0.71$).
-4. **Factual recall happens early; reasoning happens deep.** Fact retrieval linearizes at $27\%$ layer depth; reasoning requires $41\%$ depth ($\Delta = +13.6\%$, $p < 0.05$). The brain of the transformer decides whether it knows a fact well before it decides whether its math proof will work.
-5. **LLMs are cowards more often than they are liars.** In the quadrant analysis, models hedged on questions they actually knew $10\times$ more often than they hallucinated with confidence ($10.8\%$ Excessive Hedging vs $1.1\%$ Performative Certainty). On abstention betting, $20.3\%$ of passes were missed knowledge.
+4. **Factual recall happens early; reasoning happens deep.** Fact retrieval linearizes at $27\%$ layer depth; reasoning requires $41\%$ depth ($\Delta = +13.6\%$, suggestive trend on 25-pp grid, permutation $p = 0.053$). Early layers capture associative factual lookups, while multi-step reasoning requires deeper representations.
+5. **Epistemic mismatch is governed by difficulty, not syntax.** In continuous analysis, the mismatch gap ($\Delta = \text{Verbal} - \text{Behavioral}$) is centered symmetrically at zero ($\text{mean} = -0.006$). The discrete 10:1 "hedging" ratio (90 vs 9) was an artifact of applying a 0.5 cutoff to calibrated probabilities on hard tasks; question phrasing (dates, numbers, entities) does not drive over- or under-confidence ($p > 0.30$).
 
 ---
 ###### NOTE: To write the final paper, structure the narrative around these three pillars:
 1. **The Epistemic Decoupling:** Verbal confidence is fragile and decoupled from internal representations.
 2. **The Predictive Hierarchy:** Behavioral consensus dominates, while internal probes provide clean orthogonal signal.
-3. **The Mechanistic Emergence:** Internal correctness representations emerge $13.6\%$ deeper for reasoning than retrieval (H4).
+3. **The Mechanistic Emergence:** Internal correctness representations emerge $13.6\%$ deeper for reasoning than retrieval (H4 suggestive trend).
 ---

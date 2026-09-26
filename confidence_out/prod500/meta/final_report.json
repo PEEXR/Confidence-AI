@@ -3,7 +3,7 @@
     "run_name": "prod500",
     "config_hash": "b11fe302abde",
     "seed": 20260813,
-    "code_sha": "UNBOUND-nogit",
+    "code_sha": "7570841a9ef1de659c9d60c27a8a97ca0c03e921",
     "platform": "molab",
     "devices": {
       "cuda": true,

@@ -32,8 +32,24 @@
 import importlib
 import importlib.metadata
 import importlib.util
+import os
 import subprocess
 import sys
+from pathlib import Path
+
+# If running on a fresh Molab/Colab instance with an empty filesystem, pull the repo:
+# !git clone -b prod500 https://github.com/PEEXR/Confidence-AI.git .
+if not Path("confidence_out/prod500/data/question_bank.json").exists() and not Path(".git").exists():
+    try:
+        print("Detected fresh cloud instance without Confidence-AI repo. Pulling prod500 branch...")
+        import shutil
+        subprocess.run(["git", "clone", "--depth", "1", "-b", "prod500", "https://github.com/PEEXR/Confidence-AI.git", "_repo"], check=False)
+        if Path("_repo/confidence_out/prod500/data/question_bank.json").exists():
+            shutil.copytree("_repo/confidence_out", "confidence_out", dirs_exist_ok=True)
+            shutil.rmtree("_repo", ignore_errors=True)
+            print("Successfully pulled prod500 data and baseline artifacts!")
+    except Exception as _e:
+        print(f"Git clone skipped or failed ({_e}). If running offline, ensure repo is uploaded.")
 
 
 def _pip(*pkgs):
@@ -374,7 +390,10 @@ class Config:
     COMMIT_CELLS_OUTSIDE_BAND: bool = True              # False = delete out-of-band cells (pre-audit)
 
     # ------------------------------------------------------- probe (§6) ---
-    PERCENTILES: tuple[int, ...] = (0, 25, 50, 75, 100)
+    PERCENTILES: tuple[int, ...] = (
+        0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50,
+        55, 60, 65, 70, 75, 80, 85, 90, 95, 100
+    )
     # PLAN §6·5 recommends the ENTROPY label. Training on `correct` makes the
     # probe a second supervised accuracy predictor, so the "three-signal
     # comparison" races one unsupervised signal against two supervised ones
@@ -394,6 +413,7 @@ class Config:
     P0_NEG_CONTROL_TOL: float = 0.10    # |AUROC(p0) - 0.5| above this fails Gate 3
     LABEL_SHUFFLE_REPEATS: int = 20     # null distribution size
     SURFACE_BASELINE: bool = True       # TF-IDF prompt-only control (PLAN §14.1)
+    H4_ONSET_RULE: str = "two_consecutive"  # two_consecutive | single_point (PLAN §13)
 
     # ------------------------------------------------------- grading -----
     NUMERIC_TOLERANCE: float = 1e-6
@@ -437,7 +457,7 @@ class Config:
     JSONL_ENSURE_ASCII: bool = False
 
     # -------------------------------------------------------- figures ----
-    FIG_DPI: int = 200
+    FIG_DPI: int = 300
     FIG_FORMATS: tuple[str, ...] = ("png", "pdf")
     FIG_STYLE: str = "paper"            # paper | dark
     FIG_WIDTH: float = 7.2              # inches; two-column figure width
@@ -508,6 +528,15 @@ CFG = replace(
 # Session 2 of 2 — the 7B pair only (resumes shared question bank):
 # CFG = replace(CFG, RUN_NAME="s1",
 #               ONLY_MODELS=("qwen2.5-7b-instruct", "qwen2.5-7b-base"))
+#
+# Fine 5% probe sweep isolated run (preserves prod500 25-pp baseline):
+# CFG = replace(
+#     CFG,
+#     RUN_NAME="prod500_5pct",
+#     PERCENTILES=tuple(range(0, 101, 5)),
+#     H4_ONSET_RULE="two_consecutive",
+#     STAGES=("extract", "probe", "calibrate", "stats", "figures", "tables", "report"),
+# )
 
 print(f"config hash   : {CFG.hash()}")
 print(f"run name      : {CFG.RUN_NAME}")
@@ -549,7 +578,23 @@ def _resolve_paths(cfg: Config) -> dict:
     return tree
 
 
+def seed_from_base_run(cfg: Config, base_run: str = "prod500") -> None:
+    """When running a fine-sweep upgrade (e.g. prod500_5pct), seed shared
+    question bank and raw text generations from the base run to save GPU time."""
+    d = PLATFORM_PATHS.get(cfg.resolved_platform(), PLATFORM_PATHS["local"])
+    base_root = Path(cfg.OUTPUT_ROOT or d["out"]) / base_run
+    target_root = Path(cfg.OUTPUT_ROOT or d["out"]) / cfg.RUN_NAME
+    if base_root.exists() and base_root != target_root:
+        for sub in ("data", "raw"):
+            src = base_root / sub
+            dst = target_root / sub
+            if src.exists() and not (dst / "question_bank.json" if sub == "data" else dst).exists():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+                LOG.log("run_seeded", base=base_run, sub=sub, dst=str(dst))
+
+
 PATHS = _resolve_paths(CFG)
+seed_from_base_run(CFG)
 
 if PATHS["hf_cache"]:
     PATHS["hf_cache"].mkdir(parents=True, exist_ok=True)
@@ -1782,7 +1827,7 @@ class ActivationTap:
         # layers[23] of 28 and still look like "the final block". The depth
         # percentiles are the entire point of Signal 3, so a stale
         # MODEL_SPECS['layers'] must be an error, not a quiet re-scaling.
-        # Compare the WHOLE map, not just p100: with PERCENTILES=(0,25,50,75)
+        # Compare the WHOLE map, not just p100: with 21-pt PERCENTILES=(0, 5, ..., 100)
         # there is no p100 entry to check, and an under-counted spec would
         # still shift every depth silently.
         truth = percentile_layers(n_blocks, percentiles)
@@ -2097,11 +2142,11 @@ def generate_batch(lm: LoadedModel, prompts: list[str], max_new_tokens: int,
 
 def run_generation(lm: LoadedModel, items: list[dict], variant: str, tier: str, cfg: Config,
                    ckpt: Checkpoint, n_return: int = 1, temperature: float | None = None,
-                   capture_activations: bool = False) -> dict:
+                   capture_activations: bool = False, force_todo: bool = False) -> dict:
     """Drive one (model, tier, variant) pass with resume, OOM backoff, and
     periodic cache clearing. Returns a stats dict for the ledger."""
     tier_spec = TIER_SPECS[tier]
-    todo = [it for it in items if not ckpt.has(qid=it["qid"], variant=variant)]
+    todo = items if force_todo else [it for it in items if not ckpt.has(qid=it["qid"], variant=variant)]
     stats = {"requested": len(items), "todo": len(todo), "generated": 0, "parse_ok": 0,
              "oom_backoffs": 0, "seconds": 0.0, "out_tokens": 0}
     if not todo:
@@ -2198,25 +2243,36 @@ def save_activations(model: str, tier: str, qids: list[str],
         fin[f"p{p}"] = finiteness_stats(arr)
     if path.exists():                                # merge with a previous session
         old = np.load(path, allow_pickle=True)
-        merged = {"qids": np.concatenate([old["qids"], payload["qids"]])}
-        for p in cfg.PERCENTILES:
-            k = f"p{p}"
-            if k in old and k in payload:
-                merged[k] = np.concatenate([old[k], payload[k]], axis=0)
-        # De-duplicate by qid, keeping the most recent row. The checkpoint
-        # normally prevents re-extracting a question at all, but it keys on
-        # (qid, variant) — so renaming the variant makes every question look
-        # new and would append a second copy of the whole shard. Duplicated
-        # rows would silently double the probe's training set and break the
-        # independence its AUROC assumes.
-        last = {}
-        for i, q in enumerate(merged["qids"]):
-            last[str(q)] = i
-        keep = np.array(sorted(last.values()), dtype=int)
-        if len(keep) != len(merged["qids"]):
-            LOG.log("activations_deduped", model=model, tier=tier,
-                    before=len(merged["qids"]), after=len(keep))
-        payload = {k: v[keep] for k, v in merged.items()}
+        old_qids = [str(q) for q in old["qids"]]
+        new_qids = [str(q) for q in payload["qids"]]
+        old_map = {q: i for i, q in enumerate(old_qids)}
+        new_map = {q: i for i, q in enumerate(new_qids)}
+
+        payload_has_all_p = all(f"p{p}" in payload for p in cfg.PERCENTILES)
+        if set(old_qids).issubset(set(new_qids)) and payload_has_all_p:
+            merged_payload = payload
+        else:
+            all_qids = list(dict.fromkeys(new_qids + old_qids))
+            merged_payload = {"qids": np.array(all_qids, dtype=object)}
+            for p in cfg.PERCENTILES:
+                k = f"p{p}"
+                in_new = k in payload
+                in_old = k in old
+                if not in_new and not in_old:
+                    continue
+                sample_vec = payload[k][0] if in_new else old[k][0]
+                arr = np.zeros((len(all_qids), *sample_vec.shape), dtype=cfg.PROBE_STORE_DTYPE)
+                for out_idx, q in enumerate(all_qids):
+                    if in_new and q in new_map:
+                        arr[out_idx] = payload[k][new_map[q]]
+                    elif in_old and q in old_map:
+                        arr[out_idx] = old[k][old_map[q]]
+                merged_payload[k] = arr
+            if len(all_qids) < len(new_qids) + len(old_qids):
+                LOG.log("activations_deduped", model=model, tier=tier,
+                        before=len(new_qids) + len(old_qids), after=len(all_qids))
+        payload = merged_payload
+        fin = {k: finiteness_stats(payload[k]) for k in payload if k.startswith("p")}
     (np.savez_compressed if cfg.COMPRESS_ACTIVATIONS else np.savez)(path, **payload)
     json_write(PATHS["acts"] / f"{model}__{tier}.finiteness.json", fin)
     LOG.log("activations_saved", model=model, tier=tier, n=len(payload["qids"]),
@@ -2341,7 +2397,7 @@ def assert_prompt_alignment(lm: LoadedModel, bank: dict, cfg: Config,
 
 
 def stage_extract(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str]) -> dict:
-    """Signal 3 — single greedy pass, five percentile taps at the last prompt
+    """Signal 3 — single greedy pass, 21 depth-percentile taps at the last prompt
     token (PLAN §6). Uses the SAMPLE prompt so the probe reads a plain
     answering context, not a confidence-elicitation context."""
     assert_prompt_alignment(lm, bank, cfg)
@@ -2349,9 +2405,23 @@ def stage_extract(lm: LoadedModel, bank: dict, cfg: Config, committed: set[str])
     for tier in cfg.active_tiers():
         if cell_id(lm.name, tier) not in committed:
             continue
+        npz_path = PATHS["acts"] / f"{lm.name}__{tier}.npz"
+        needs_acts = False
+        if cfg.SAVE_ACTIVATIONS:
+            if not npz_path.exists():
+                needs_acts = True
+            else:
+                try:
+                    loaded = np.load(npz_path, allow_pickle=True)
+                    missing_p = [p for p in cfg.PERCENTILES if f"p{p}" not in loaded]
+                    if missing_p:
+                        needs_acts = True
+                except Exception:
+                    needs_acts = True
         with open_ckpt("extract", lm.name, tier, cfg) as ck:
             out[tier] = run_generation(lm, cell_items(bank, tier, "all"), "EXTRACT", tier, cfg, ck,
-                                       temperature=0.0, capture_activations=True)
+                                       temperature=0.0, capture_activations=True,
+                                       force_todo=needs_acts)
     return out
 
 
@@ -4261,13 +4331,27 @@ def test_h4_depth(sweep: pd.DataFrame, cfg: Config, gate3: "dict | None" = None)
         return {"available": False, "gate3_excluded_cells": excluded,
                 "reason": ("every cell failed Gate 3" if excluded else "no probe sweep")}
     onsets = []
+    rule = getattr(cfg, "H4_ONSET_RULE", "two_consecutive")
     for (model, tier), g in sweep.groupby(["model", "tier"]):
-        g = g.sort_values("layer_pct")
-        hit = g[g["auroc_cal"] >= cfg.AUROC_GATE]
+        g = g.sort_values("layer_pct").reset_index(drop=True)
+        onset_val = np.nan
+        reached = False
+        n_pts = len(g)
+        if rule == "two_consecutive" and n_pts >= 2:
+            for idx in range(n_pts - 1):
+                if g.loc[idx, "auroc_cal"] >= cfg.AUROC_GATE and g.loc[idx + 1, "auroc_cal"] >= cfg.AUROC_GATE:
+                    onset_val = float(g.loc[idx, "layer_pct"])
+                    reached = True
+                    break
+        else:
+            hit = g[g["auroc_cal"] >= cfg.AUROC_GATE]
+            if len(hit):
+                onset_val = float(hit["layer_pct"].iloc[0])
+                reached = True
         onsets.append(dict(model=model, tier=tier, family=TIER_SPECS[tier]["family"],
                            params_b=MODEL_SPECS[model]["params_b"],
-                           onset=float(hit["layer_pct"].iloc[0]) if len(hit) else np.nan,
-                           reached=bool(len(hit)),
+                           onset=onset_val,
+                           reached=reached,
                            asymptote=float(g["auroc_cal"].max())))
     odf = pd.DataFrame(onsets)
     odf.to_parquet(PATHS["derived"] / "h4_onsets.parquet", index=False)
@@ -4281,13 +4365,37 @@ def test_h4_depth(sweep: pd.DataFrame, cfg: Config, gate3: "dict | None" = None)
         if r["params_b"].nunique() > 2:
             scale = {"spearman_onset_vs_scale": spearman_with_ci(
                 r["params_b"].values, r["onset"].values, cfg.N_BOOTSTRAP, cfg.BOOTSTRAP_CI, cfg.SEED)}
+    # C1 sensitivity analysis: delta excluding C1 cells
+    odf_no_c1 = odf[odf.reached & (odf.tier != "C1")]
+    ret_no_c1 = odf_no_c1[odf_no_c1.family == "retrieval"]["onset"].values
+    rea_no_c1 = odf_no_c1[odf_no_c1.family == "reasoning"]["onset"].values
+    c1_sens = {}
+    if ret_no_c1.size and rea_no_c1.size:
+        c1_sens = {"c1_sensitivity": {
+            "n_retrieval": len(ret_no_c1),
+            "n_reasoning": len(rea_no_c1),
+            "mean_retrieval": float(ret_no_c1.mean()),
+            "mean_reasoning": float(rea_no_c1.mean()),
+            "delta_without_c1": float(rea_no_c1.mean() - ret_no_c1.mean()),
+        }}
     out = {"available": True, "onsets": odf.to_dict("records"),
+           "onset_rule": rule,
            "mean_onset_retrieval": float(ret.mean()) if ret.size else None,
            "mean_onset_reasoning": float(rea.mean()) if rea.size else None,
            "delta_reasoning_minus_retrieval": delta,
            "n_reasoning_never_reached": int((~odf[odf.family == "reasoning"]["reached"]).sum()),
-           **scale,
-           "h4_pass": bool(delta["excludes_zero"] and (delta["lo"] > 0))}
+           **scale, **c1_sens}
+    if ret.size and rea.size:
+        obs_diff = float(rea.mean() - ret.mean())
+        combined = np.concatenate([rea, ret])
+        n_rea = len(rea)
+        rng = np.random.default_rng(cfg.SEED)
+        perm_diffs = []
+        for _ in range(20000):
+            perm = rng.permutation(combined)
+            perm_diffs.append(perm[:n_rea].mean() - perm[n_rea:].mean())
+        out["permutation_p"] = float((np.array(perm_diffs) >= obs_diff).mean())
+    out["h4_pass"] = bool(delta["excludes_zero"] and (delta["lo"] > 0))
     out["verdict"] = ("H4 supported — internal signal onsets later for reasoning than retrieval"
                       if out["h4_pass"] else
                       "H4 falsified / null — onset curves overlap, or reasoning never reaches the gate")
@@ -5300,7 +5408,8 @@ def fig4_depth_curves(sweep: pd.DataFrame, cfg: Config) -> None:
             if t["auroc_null_p95"].notna().any():
                 ax.fill_between(t["layer_pct"], 0.5, t["auroc_null_p95"],
                                 color=GRID, alpha=0.55, lw=0, zorder=1)
-        ax.set(xlabel="layer percentile", xticks=list(cfg.PERCENTILES), ylim=(0.35, 1.0),
+        ticks = [0, 25, 50, 75, 100] if len(cfg.PERCENTILES) > 9 else list(cfg.PERCENTILES)
+        ax.set(xlabel="layer percentile", xticks=ticks, ylim=(0.35, 1.0),
                title=f"{model.replace('qwen2.5-', '').replace('-instruct', '')}"
                      f" ({MODEL_SPECS[model]['params_b']:.1f}B)")
         if k == 0:

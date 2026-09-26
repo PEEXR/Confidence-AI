@@ -295,16 +295,18 @@ internal meta-cognition (`FINDINGS.md` §1.1).
 2. **Extract hidden state at the last prompt token position** only — no
    during-generation / multi-timestep probing (see note below). Cleaner than
    last-generated-token, no look-ahead bias from the model's own answer.
-3. **Sweep five fixed depth percentiles** per question at that one position —
+3. **Sweep depth percentiles** per question at that one position —
    same position, different layer, isolating depth as the sole swept
    variable:
+   - **Coarse Grid (5 points):** $\{0\%, 25\%, 50\%, 75\%, 100\%\}$ evaluated in `prod500`.
+   - **Fine Grid (21 points):** $\{0\%, 5\%, 10\%, \dots, 100\%\}$ evaluated in `prod500_5pct`, mapping each percentile $p$ to discrete layer index $l = \text{round}\left(\frac{p}{100} \cdot n_{\text{layers}}\right)$:
 
-   | Model | 0% | 25% | 50% | 75% | 100% |
-   |---|---|---|---|---|---|
-   | 0.5B (24 layers) | 0 | 6 | 12 | 18 | 24 |
-   | 1.5B (28 layers) | 0 | 7 | 14 | 21 | 28 |
-   | 3B (36 layers) | 0 | 9 | 18 | 27 | 36 |
-   | 7B (28 layers) | 0 | 7 | 14 | 21 | 28 |
+   | Model (Layers) | 0% | 5% | 10% | 15% | 20% | 25% | 30% | 35% | 40% | 45% | 50% | 55% | 60% | 65% | 70% | 75% | 80% | 85% | 90% | 95% | 100% |
+   |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+   | **0.5B (24 layers)** | 0 | 1 | 2 | 4 | 5 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 14 | 16 | 17 | 18 | 19 | 20 | 22 | 23 | 24 |
+   | **1.5B (28 layers)** | 0 | 1 | 3 | 4 | 6 | 7 | 8 | 10 | 11 | 13 | 14 | 15 | 17 | 18 | 20 | 21 | 22 | 24 | 25 | 27 | 28 |
+   | **3B (36 layers)** | 0 | 2 | 4 | 5 | 7 | 9 | 11 | 13 | 14 | 16 | 18 | 20 | 22 | 23 | 25 | 27 | 29 | 31 | 32 | 34 | 36 |
+   | **7B (28 layers)** | 0 | 1 | 3 | 4 | 6 | 7 | 8 | 10 | 11 | 13 | 14 | 15 | 17 | 18 | 20 | 21 | 22 | 24 | 25 | 27 | 28 |
 
 4. **Train one logistic regression per (question set × percentile)**, with
    `StandardScaler` first. Use a 1-layer MLP or PCA pre-reduction only if
@@ -651,9 +653,12 @@ data — an estimator chosen after the curves are seen is not an estimator.
   in internals — a mechanistic explanation for H1's verbal-hot effect.
 - **Estimator + pass rule.** Per (tier × model) AUROC-vs-percentile curve on
   the calibration split against the label-shuffle null; compare onset
-  percentile (first percentile reaching AUROC ≥ 0.65) across tiers with a
-  bootstrap CI on the onset difference; pass if the retrieval−reasoning onset
-  CI excludes 0 and Gate 3 holds for affected cells.
+  percentile across tiers with a bootstrap CI on the onset difference (primary)
+  and a 20,000-draw permutation test (secondary). On the 5% fine grid, onset
+  enforces a **2-consecutive confirmation rule** (first percentile $p$ where
+  $\text{AUROC}(p) \ge 0.65$ and $\text{AUROC}(p + 5) \ge 0.65$) to suppress
+  single-layer flicker while remaining robust to late-layer representation collapse;
+  pass if the retrieval−reasoning onset CI excludes 0 and Gate 3 holds for affected cells.
 - **Experiment.** E2 (ladder runs), E4 (sweep).
 
 ## 14. Controls
